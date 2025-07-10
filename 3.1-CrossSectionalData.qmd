@@ -1,0 +1,438 @@
+---
+title: "3.1-CrossSectionalData"
+format: 
+  html:
+    toc: true
+    keep-md: true
+  gfm: default
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+```
+
+```{r}
+#| message: false
+library(igraph)
+library(reshape)
+```
+
+
+# Reading data
+
+```{r}
+url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class555_matrix.csv"
+class_mat <- read.csv(file = url1)
+class(class_mat)
+```
+
+```{r}
+class_mat <- as.matrix(class_mat)
+rownames(class_mat) <- 1:nrow(class_mat)
+colnames(class_mat) <- 1:ncol(class_mat)
+class_mat
+```
+
+```{r}
+url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class555_attributedata.csv"
+class_attributes <- read.csv(file = url2, stringsAsFactors = T)
+class_attributes
+```
+
+```{r}
+class(class_attributes[, "gender"])
+levels(class_attributes[, "gender"])
+```
+
+# `igraph` networks
+
+## Construction from matrix
+
+Must convert data frames to matrices.
+
+```{r}
+class_net_by_matrix <- graph_from_adjacency_matrix(
+  adjmatrix = class_mat,
+  mode = "directed"
+)
+class_net_by_matrix
+```
+
+map node attributes
+
+```{r}
+class_net_by_matrix <- set_vertex_attr(
+  graph = class_net_by_matrix,
+  name = "gender",
+  value = class_attributes$gender
+)
+class_net_by_matrix <- set_vertex_attr(
+  graph = class_net_by_matrix,
+  name = "grade",
+  value = class_attributes$grade
+)
+class_net_by_matrix <- set_vertex_attr(
+  graph = class_net_by_matrix,
+  name = "race",
+  value = class_attributes$race
+)
+class_net_by_matrix
+```
+
+## Construction from edge list
+
+```{r}
+url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class555_edgelist.csv"
+
+class_edges <- read.csv(file = url3)
+head(class_edges)
+```
+
+```{r}
+class_net_by_edges <- graph_from_data_frame(
+  d = class_edges,
+  directed = T
+)
+class_net_by_edges
+```
+
+> The same, with a vertex argument for attributes
+
+```{r}
+class_net_by_edges <- graph_from_data_frame(
+  d = class_edges,
+  directed = T,
+  vertices = class_attributes
+)
+class_net_by_edges
+```
+
+```{r}
+V(class_net_by_edges)$name
+```
+
+As discussed above, the edgelist does not contain information about isolates. If there are isolates in the network and we want to construct the network from an edgelist, we need to be careful.
+
+```{r}
+net <- graph_from_data_frame(
+  d = class_edges, directed = T,
+  vertices = (id <- 1:26)
+)
+plot(net)
+```
+
+## Extracting information
+
+```{r}
+vertex_attr(
+  graph = class_net_by_edges,
+  name = "grade"
+)
+```
+
+```{r}
+weights <- edge_attr(
+  graph = class_net_by_edges,
+  name = "weight"
+)
+weights
+```
+
+## Extracting matrices and edgelists
+
+```{r}
+class_edges_temp <- as_edgelist(
+  graph = class_net_by_edges, names = F
+)
+head(class_edges_temp)
+```
+
+```{r}
+as_adjacency_matrix(graph = class_net_by_edges)
+```
+
+## Construction from adjacency list
+
+```{r}
+url4 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class555_adjacency_list.csv"
+
+class_adjacency <- read.csv(file = url4)
+class_adjacency
+```
+
+```{r}
+nomination_cols <- paste0("Nomination", 1:5)
+nomination_cols
+```
+
+```{r}
+class_edgelist_by_adjaceny <-
+  reshape(
+    data = class_adjacency,
+    varying = nomination_cols,
+    v.names = "receiver",
+    idvar = "id",
+    direction = "long"
+  )
+head(class_edgelist_by_adjaceny)
+```
+
+```{r}
+class_edgelist_by_adjaceny <- class_edgelist_by_adjaceny[, -2]
+colnames(class_edgelist_by_adjaceny) <- c("sender", "receiver")
+keepers <- complete.cases(class_edgelist_by_adjaceny)
+class_edgelist_by_adjaceny <- class_edgelist_by_adjaceny[keepers, ]
+ordering <- order(class_edgelist_by_adjaceny$sender)
+class_edgelist_by_adjaceny <- class_edgelist_by_adjaceny[ordering, ]
+head(class_edgelist_by_adjaceny)
+```
+
+# `network` networks
+
+```{r}
+#| message: false
+detach(package:igraph)
+library(network)
+```
+
+## Construction from matrix
+
+```{r}
+class_net_by_matrix_2 <-
+  network(x = class_mat, directed = T)
+class_net_by_matrix_2
+```
+
+It is often easier to treat the attributes as characters (rather than factors) when they are categorical variables.
+
+```{r}
+class_attributes$race <- as.character(class_attributes$race)
+class_attributes$gender <- as.character(class_attributes$gender)
+attribute_list <- do.call(list, class_attributes)
+attribute_list_2 <- as.list.data.frame(class_attributes)
+attribute_list
+attribute_list_2
+```
+
+```{r}
+class_net_by_matrix_net <-
+  network(
+    x = class_mat, directed = T,
+    vertex.attr = attribute_list
+  )
+class_net_by_matrix_net
+```
+
+Setting vertext attributes manually
+
+```{r}
+set.vertex.attribute(
+  x = class_net_by_matrix_net,
+  attrname = "gradenew",
+  value = class_attributes$grade
+)
+class_net_by_matrix_net
+```
+
+## Construction from edgelist
+
+```{r}
+class_net_by_edges_net <- network(
+  x = class_edges, directed = T,
+  vertices = class_attributes
+)
+class_net_by_edges_net
+```
+
+```{r}
+as.matrix(class_net_by_edges_net)
+```
+
+```{r}
+get.vertex.attribute(x = class_net_by_edges_net, attrname = "grade")
+```
+
+Check the order
+
+```{r}
+get.vertex.attribute(
+  x = class_net_by_edges_net,
+  attrname = "vertex.names"
+)
+```
+
+## Add Edge Attributes
+
+```{r}
+set.edge.attribute(
+  x = class_net_by_edges_net,
+  attrname = "weight",
+  value = class_edges[, "weight"]
+)
+class_net_by_edges_net
+```
+
+# Moving between `igraph` and `network`
+
+```{r}
+library(intergraph)
+```
+
+```{r}
+asNetwork(class_net_by_edges)
+```
+
+# Key network measures
+
+## Degree
+
+```{r}
+head(class_mat)
+outdeg <- rowSums(class_mat)
+outdeg
+```
+
+```{r}
+indeg <- colSums(class_mat)
+indeg
+```
+
+```{r}
+#| message: false
+detach(package:network)
+library(igraph)
+```
+
+```{r}
+outdeg_igraph <- degree(
+  graph = class_net_by_edges, mode = "out"
+)
+indeg_igraph <- degree(
+  graph = class_net_by_edges, mode = "in"
+)
+table(outdeg == outdeg_igraph)
+```
+
+## Density
+
+```{r}
+num_edges <- gsize(class_net_by_edges)
+num_edges
+```
+
+```{r}
+num_nodes <- gorder(class_net_by_edges)
+num_nodes
+```
+
+Number of dyads (number of possible edges)
+
+```{r}
+number_dyads <- (num_nodes * (num_nodes - 1))
+den <- num_edges / number_dyads
+den
+```
+
+Or, simply using `igraph`
+
+```{r}
+edge_density(class_net_by_edges)
+```
+
+## Walks
+
+By raising the matrix to the nth power, we get the number of walks of length n between all ij pairs. 
+
+```{r}
+walks2 <- class_mat %*% class_mat
+walks2
+```
+
+```{r}
+class_mat[c(1, 7), ]
+```
+
+```{r}
+walks3 <- class_mat %*% class_mat %*% class_mat
+walks3
+```
+
+## Paths, distance, closeness
+
+### Shortest path
+
+```{r}
+dist_mat <- distances(
+  graph = class_net_by_edges,
+  mode = "out"
+)
+dist_mat[1:10, 1:10]
+```
+
+### Specific paths
+
+```{r}
+all_shortest_paths(
+  class_net_by_edges,
+  from = 1, to = 6
+)
+```
+
+```{r}
+all_shortest_paths(
+  class_net_by_edges,
+  from = 1, to = 16
+)
+```
+
+Mean distance between nodes
+
+```{r}
+diag(dist_mat) <- NA
+mean(dist_mat, na.rm = T)
+```
+
+Excluding unreachable pairs
+
+```{r}
+mean(dist_mat[dist_mat != Inf], na.rm = T)
+```
+
+### Closeness
+
+Alternative measure when unreachable pairs. zeros are unreachable pairs.
+
+```{r}
+close_mat <- 1 / dist_mat
+close_mat[1:10, 1:10]
+```
+
+```{r}
+mean(close_mat, na.rm = T)
+```
+
+The difference in the 2 calculations is due to the exclusion/inclusion of unreachable nodes.
+
+```{r}
+median(dist_mat, na.rm = T)
+median(close_mat, na.rm = T)
+```
+
+## Reachability
+
+```{r}
+reach_mat <- ifelse(dist_mat < Inf, yes = 1, no = 0)
+reach_mat
+```
+
+## Diameter
+
+```{r}
+max(dist_mat[dist_mat != Inf], na.rm = T)
+```
+
+```{r}
+diameter(class_net_by_edges)
+```
+

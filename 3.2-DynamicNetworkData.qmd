@@ -1,0 +1,262 @@
+---
+title: "3.2-Dynamic Network Data"
+format: 
+  html:
+    toc: true
+    keep-md: true
+  gfm: default
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+```
+
+# Discrete Longitudinal Networks
+
+## Preparation
+
+```{r}
+#| message: false
+library(network)
+library(sna)
+library(networkDynamic)
+library(tsna)
+```
+
+```{r}
+url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class237_sem1_edgelist.txt"
+
+sem1_edgelist <- read.table(file = url1, header = T, colClasses = "character")
+head(sem1_edgelist)
+```
+
+```{r}
+url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class237_sem1_attributes.txt"
+
+sem1_attributes <- read.table(file = url2, header = T)
+sem1_attributes[, 1:5]
+```
+
+Order by id
+
+```{r}
+sem1_attributes <- sem1_attributes[order(sem1_attributes$ids), ]
+sem1_attributes$ids <- as.character(sem1_attributes$ids)
+```
+
+```{r}
+sem1_net <- network(
+  x = sem1_edgelist, directed = T,
+  vertices = sem1_attributes
+)
+```
+
+Sometimes it is easier to remove the labels before constructing the network.
+
+```{r}
+edgelist_relabel_function <- function(edgelist, ids) {
+  data.frame(
+    sender = as.numeric(factor(edgelist[, 1],
+      levels = ids
+    )),
+    receiver = as.numeric(factor(edgelist[, 2],
+      levels = ids
+    ))
+  )
+}
+```
+
+```{r}
+sem1_edgelist_nolabel <- edgelist_relabel_function(
+  edgelist = sem1_edgelist,
+  ids = sem1_attributes$ids
+)
+head(sem1_edgelist_nolabel)
+```
+
+```{r}
+url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class237_sem2_edgelist.txt"
+
+sem2_edgelist <- read.table(file = url3, header = T, colClasses = "character")
+
+url4 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class237_sem2_attributes.txt"
+
+sem2_attributes <- read.table(file = url4, header = T)
+sem2_attributes <- sem2_attributes[order(sem2_attributes$ids), ]
+sem2_attributes$ids <- as.character(sem2_attributes$ids)
+
+sem2_net <- network(x = sem2_edgelist, directed = T, vertices = sem2_attributes)
+```
+
+## Constructing networkDynamic Objects
+
+With discretely-observed network data, can use a list of networks as the main input.
+
+```{r}
+net_list <- list(sem1_net, sem2_net)
+
+net_dynamic_class <- networkDynamic(
+  network.list = net_list,
+  vertex.pid = "vertex.names",
+  create.TEAs = T
+)
+net_dynamic_class
+```
+```{r}
+net_data_class <- as.data.frame(net_dynamic_class)
+head(net_data_class)
+```
+
+> Node ids
+
+```{r}
+get.vertex.pid(net_dynamic_class)[1:5]
+```
+
+> Activity
+
+```{r}
+activity_data <- get.vertex.activity(
+  net_dynamic_class,
+  as.spellList = T
+)
+activity_data
+```
+
+Which are in only 1 semester?
+
+```{r}
+activity_data[activity_data$duration < 2, ]
+```
+
+## Summary Statistics
+
+```{r}
+tSnaStats(
+  nd = net_dynamic_class,
+  snafun = "gden"
+)
+```
+
+```{r}
+gden(sem1_net)
+gden(sem2_net)
+```
+
+`tSnaStats()` does not work well on the node level. To calculate indegree centrality, for example:
+
+```{r}
+get_degrees <- function(net, mode) {
+  names <- get.vertex.attribute(net, "vertex.names")
+  indegree <- degree(net, cmode = mode)
+  data.frame(
+    ids = names,
+    indegree = indegree
+  )
+}
+indegree_dat <-
+  get_degrees(sem1_net, "indegree") |>
+  merge(get_degrees(sem2_net, "indegree"),
+    by = "ids", all = T
+  )
+indegree_dat
+```
+
+# Continuous-time networks
+
+```{r}
+url5 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/example_edge_spells.csv"
+
+edge_spells <- read.csv(file = url5)
+head(edge_spells)
+```
+
+```{r}
+edge_spells[(edge_spells$end_time - edge_spells$start_time) > 0, ]
+```
+
+The times node 11 talked to node 2
+
+```{r}
+edge_spells[edge_spells$send_col == 11 & edge_spells$receive_col == 2, ]
+```
+
+Vertex spells will show how nodes move in and out of the network
+
+```{r}
+url6 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/example_vertex_spells.csv"
+
+vertex_spells <- read.csv(file = url6)
+head(vertex_spells)
+```
+
+Here we set the start time to 0 for all nodes (as everyone is present for the whole time period) and the end time as the end of the class period. 
+
+## Constructing networkDynamic Objects
+
+```{r}
+net_dynamic_interactions <-
+  networkDynamic(
+    vertex.spells = vertex_spells,
+    edge.spells = edge_spells
+  )
+net_dynamic_interactions
+```
+
+```{r}
+plot(net_dynamic_interactions)
+```
+
+The plot collapses the periods to produce one graph.
+
+## Summary statistics
+
+Unlike discrete-time cases, time ranges must be defined for summary statistics
+
+This example uses 10 minute intervals.
+
+```{r}
+tSnaStats(
+  nd = net_dynamic_interactions, snafun = "degree",
+  time.interval = 10, aggregate.dur = 10, cmode = "indegree"
+)
+```
+
+Alternatively, calculate degree on a collapsed (flattened) version.
+
+```{r}
+net_0_10 <- network.collapse(
+  dnet = net_dynamic_interactions,
+  onset = 0, length = 10
+)
+degree(net_0_10, cmode = "indegree")
+```
+
+> Density
+
+```{r}
+tSnaStats(
+  nd = net_dynamic_interactions, snafun = "gden",
+  time.interval = 10, aggregate.dur = 10
+)
+```
+
+Aggregate 1 minute intervals and print every 5th.
+
+```{r}
+tSnaStats(
+  nd = net_dynamic_interactions, snafun = "degree",
+  time.interval = 5, aggregate.dur = 1, cmode = "indegree"
+)
+```
+
+```{r}
+tSnaStats(
+  nd = net_dynamic_interactions, snafun = "gden",
+  time.interval = 5, aggregate.dur = 1
+)
+```
+
+
+
