@@ -1,0 +1,710 @@
+---
+title: "6 - Ego Network Data"
+format: 
+  html:
+    toc: true
+    keep-md: true
+  gfm: default
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+options(digits = 5)
+```
+
+# Ego Network Data
+
+Ego network data are based on a sample of individuals and are commonly used in the social sciences. Each respondent (ego) reports on the people (alters) they are connected to, providing the local network around the focal respondent. Ego network data offer only pieces of the whole network, as there is typically no way of knowing if the alters named by one respondent are the same alters named by another. Ego network data thus require a somewhat different approach than with sociocentric network data. Most clearly, we must conceptually separate the information about the egos from information about the named alters, which is typically provided by ego. Ego network data can be structured in a number of ways but will generally have 4 kinds of information:
+
+    first, demographic, behavioral, etc. information on the egos
+    second, demographic, behavioral, etc. information on the named alters
+    third, information about the relationship between ego and alter
+    fourth, information about the relationships between the alters.
+
+Our example ego network data come from the 1985 General Social Survey ego network module. The GSS is a nationally representative survey that is fielded yearly, including basic demographic information, socio-economic measures and the like. In addition to the core survey given each year, the GSS will include rotating modules, including occasional modules on social networks. Here, we will work with ego network data from the GSS that has been preprocessed into three different files: a file with the ego attributes; a file with the alter attributes; and a file with the alter-alter ties. 
+
+```{r}
+url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/gss1985_ego_dat.csv"
+
+ego_dat <- read.csv(file = url1, stringsAsFactors = F)
+str(ego_dat)
+```
+
+NUMGIVEN is the number of alters named (max 6+)
+
+```{r}
+ego_dat <- ego_dat[!is.na(ego_dat$NUMGIVEN), ]
+```
+
+```{r}
+url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/gss1985_alter_dat.csv"
+
+alter_dat <- read.csv(file = url2, stringsAsFactors = F)
+str(alter_dat)
+```
+
+```{r}
+url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/gss1985_alteralter_dat.csv"
+
+alteralter_dat <- read.csv(file = url3)
+str(alteralter_dat)
+```
+
+# Homophily
+
+## Creating the network from survey data
+
+```{r}
+#| message: false
+library(egor)
+```
+
+The egor() function assumes that you are inputting the data using three separate files. The main arguments are:
+
+    alters = alter attributes data frame
+    egos = ego attributes data frame
+    aaties = alter-alter tie data frame
+    alter_design = list of arguments to specify nomination information from survey
+    ego_design = list of arguments to specify survey design of study
+    ID.vars = list of variable names corresponding to key columns:
+        ego = variable name for id of ego
+        alter = variable name for id of alter (in alter data)
+        source = variable name for 'sender' of tie in alter-alter data
+        target = variable name for 'receiver' of tie in alter-alter data
+
+
+```{r}
+egonetlist <- egor(
+  alters = alter_dat, egos = ego_dat,
+  aaties = alteralter_dat, alter_design = list(max = 5),
+  ID.vars = list(
+    ego = "CASEID", alter = "ALTERID",
+    source = "ALTER1", target = "ALTER2"
+  )
+)
+egonetlist
+```
+
+```{r}
+egonetlist <- egor(
+  alters = alter_dat, egos = ego_dat,
+  aaties = alteralter_dat, alter_design = list(max = 5),
+  ID.vars = list(
+    ego = "CASEID", alter = "ALTERID",
+    source = "ALTER1", target = "ALTER2"
+  )
+)
+str(egonetlist)
+```
+
+```{r}
+names(egonetlist)
+```
+
+```{r}
+egonetlist[["ego"]][, 1:5]
+```
+
+```{r}
+egonetlist[["alter"]][, 1:5]
+```
+
+```{r}
+egonetlist[["aatie"]]
+```
+
+## Summary statistics
+
+```{r}
+dens <- ego_density(egonetlist)
+head(dens)
+```
+
+```{r}
+alteralter_dat[alteralter_dat$CASEID == 19850001, ]
+```
+
+```{r}
+alteralter_dat[alteralter_dat$CASEID == 19850002, ]
+```
+
+# Plotting Networks
+
+```{r}
+#| message: false
+library(igraph)
+```
+
+```{r}
+igraph_nets <- as_igraph(egonetlist)
+igraph_nets[1:3]
+```
+
+Extracting information
+
+```{r}
+vertex_attr(igraph_nets[[1]], "SEX")
+```
+
+```{r}
+alter_dat[alter_dat$CASEID == 19850001, "SEX"]
+```
+
+plot first three networks
+
+```{r}
+par(mfrow = c(1, 3))
+purrr::walk(igraph_nets[1:3], plot)
+```
+
+alternatively
+
+```{r}
+par(mfrow = c(1, 3))
+lapply(igraph_nets[1:3], plot)
+```
+
+```{r}
+plot_colorgender <- function(nets) {
+  cols <- vertex_attr(nets, "SEX")
+  cols <- ifelse(cols == "female", "lightskyblue", "blue")
+  plot(nets, vertex.color = cols)
+}
+```
+
+```{r}
+par(mfrow = c(1, 3))
+purrr::walk(igraph_nets[1:3], plot_colorgender)
+```
+
+# Homophily: Ego-Alter Attributes
+
+We will focus on gender and racial homophily, comparing across kin and non-kin ties. 
+
+## Proportion of Alters matching Ego
+
+eg., if ego is male, what proportion of named alters are also male?
+
+```{r}
+prop_same <- function(alt_attr, ego_attr) {
+  same <- sum(ego_attr == alt_attr, na.rm = T)
+  prop_same <- same / sum(!is.na(alt_attr))
+  prop_same[is.na(ego_attr)] <- NA
+  prop_same
+}
+```
+
+```{r}
+pmatch_sex <- comp_ply(egonetlist,
+  alt.attr = "SEX", ego.attr = "SEX",
+  .f = prop_same
+)
+head(pmatch_sex)
+```
+
+```{r}
+egonetlist_kin <- subset(
+  egonetlist, egonetlist[["alter"]]$KIN == 1,
+  unit = "alter"
+)
+pmatch_sex_kin <- comp_ply(egonetlist_kin,
+  alt.attr = "SEX",
+  ego.attr = "SEX", .f = prop_same
+)
+
+egonetlist_nonkin <- subset(
+  egonetlist, egonetlist[["alter"]]$KIN == 0,
+  unit = "alter"
+)
+pmatch_sex_nonkin <- comp_ply(egonetlist_nonkin,
+  alt.attr = "SEX",
+  ego.attr = "SEX", .f = prop_same
+)
+
+sexdat <- data.frame(
+  pmatch_sex$result, pmatch_sex_kin$result, pmatch_sex_nonkin$result
+)
+head(sexdat)
+```
+
+```{r}
+pmatch_race <- comp_ply(egonetlist,
+  alt.attr = "RACE",
+  .f = prop_same, ego.attr = "RACE"
+) # all alters
+
+pmatch_race_kin <- comp_ply(egonetlist_kin,
+  alt.attr = "RACE",
+  .f = prop_same, ego.attr = "RACE"
+) # kin
+
+pmatch_race_nonkin <- comp_ply(egonetlist_nonkin,
+  alt.attr = "RACE",
+  .f = prop_same, ego.attr = "RACE"
+) # nonkin
+
+racedat <- data.frame(
+  pmatch_race$result, pmatch_race_kin$result,
+  pmatch_race_nonkin$result
+)
+head(racedat)
+```
+
+```{r}
+apply(sexdat, MARGIN = 2, FUN = summary)
+```
+
+```{r}
+apply(racedat, MARGIN = 2, FUN = summary)
+```
+
+## Ego-Alter Pairs (Dyadic Level Homophily)
+
+How likely is a tie to exist between 2 people who match on gender and/or race? What proporiation of ties are homogenous along gender lines?
+
+```{r}
+ego_alter_dat <-
+  data.frame(as_alters_df(egonetlist, include.ego.vars = TRUE))
+head(ego_alter_dat)
+```
+
+```{r}
+cnames <- colnames(ego_alter_dat)
+cnames[3:9] <- paste0(cnames[3:9], "_alter")
+colnames(ego_alter_dat) <- cnames
+head(ego_alter_dat)
+```
+
+```{r}
+sextab <- table(
+  ego_alter_dat[, "SEX_ego"],
+  ego_alter_dat[, "SEX_alter"]
+)
+sextab
+```
+
+> Proportion of ties that match gender
+
+```{r}
+sum(diag(sextab)) / sum(sextab)
+```
+
+```{r}
+racetab <- table(
+  ego_alter_dat[, "RACE_ego"],
+  ego_alter_dat[, "RACE_alter"]
+)
+racetab
+```
+
+```{r}
+sum(diag(racetab)) / sum(racetab)
+```
+
+## Compare to baseline (randomly formed ties)
+
+In this case, pair each case with each other to calculate the base odds
+
+```{r}
+get_oddsratio <- function(egoalter_tab, attribute) {
+  match <- sum(diag(egoalter_tab))
+  notmatch <- sum(egoalter_tab) - match
+
+  freq <- table(attribute)
+  total_dyads <- sum(freq) * (sum(freq) - 1)
+
+  match_chance <- sum(freq * (freq - 1))
+  notmatch_chance <- total_dyads - match_chance
+
+  or <- (match * notmatch_chance) / (notmatch * match_chance)
+
+  return(or)
+}
+```
+
+```{r}
+get_oddsratio(sextab, ego_dat[, "SEX"])
+```
+
+```{r}
+get_oddsratio(racetab, ego_dat[, "RACE"])
+```
+
+Odds of matching on gender is 1.58 times higher than random, and race odds are 7.38 times higher.
+
+Compre kin and non-kin ties
+
+```{r}
+kin_sextab <- table(
+  ego_alter_dat[ego_alter_dat$KIN == 1, "SEX_ego"],
+  ego_alter_dat[ego_alter_dat$KIN == 1, "SEX_alter"]
+)
+get_oddsratio(kin_sextab, ego_dat[, "SEX"])
+```
+
+```{r}
+kin_racetab <- table(
+  ego_alter_dat[ego_alter_dat$KIN == 1, "RACE_ego"],
+  ego_alter_dat[ego_alter_dat$KIN == 1, "RACE_alter"]
+)
+
+get_oddsratio(egoalter_tab = kin_racetab, attribute = ego_dat[, "RACE"])
+```
+
+```{r}
+nonkin_sextab <- table(
+  ego_alter_dat[ego_alter_dat$KIN == 0, "SEX_ego"],
+  ego_alter_dat[ego_alter_dat$KIN == 0, "SEX_alter"]
+)
+
+get_oddsratio(egoalter_tab = nonkin_sextab, attribute = ego_dat[, "SEX"])
+```
+
+```{r}
+nonkin_racetab <- table(
+  ego_alter_dat[ego_alter_dat$KIN == 0, "RACE_ego"],
+  ego_alter_dat[ego_alter_dat$KIN == 0, "RACE_alter"]
+)
+
+get_oddsratio(egoalter_tab = nonkin_racetab, attribute = ego_dat[, "RACE"])
+```
+
+Adjust for the fact that some people do not form ties
+
+```{r}
+get_oddsratio(
+  egoalter_tab = sextab,
+  attribute = ego_dat$SEX[ego_dat$NUMGIVEN > 0]
+)
+```
+
+# Homophily: Alter Attributes
+
+Here, we ignore the ego attribute and simply summarize the alter attributes within each ego network. Such measures are often used as predictors of other outcomes, like political attitudes and mental health (see below for an example). 
+
+For example, we may want to know how diverse the ego network is, or how similar/different the alters are to each other. Is ego surrounded by people who are all the same? One summary measure is *Shannon entropy*, equal to: `-1 * (sum(pi * log(pi))` where pi is the proportion of alters in category i. This is a measure of diversity, with larger values meaning the ego network is more diverse.
+
+```{r}
+sex_diversity <-
+  alts_diversity_entropy(egonetlist,
+    alt.attr = "SEX",
+    base = exp(1)
+  )
+head(sex_diversity)
+```
+
+remember that the sample is half-male, half-female, so 0.673 is high.
+
+```{r}
+race_diversity <- alts_diversity_entropy(egonetlist,
+  alt.attr = "RACE",
+  base = exp(1)
+)
+head(race_diversity)
+```
+
+The function will yield 0 for either none or 1 alters. Sub NAs for these cases.
+
+```{r}
+sex_diversity[ego_dat$NUMGIVEN <= 1, "entropy"] <- NA
+race_diversity[ego_dat$NUMGIVEN <= 1, "entropy"] <- NA
+```
+
+```{r}
+options(digits = 6)
+summary(sex_diversity[, "entropy"])
+```
+
+```{r}
+options(digits = 7)
+summary(race_diversity[, "entropy"])
+```
+
+> Continuous variables
+
+```{r}
+mean_altereduc <- comp_ply(egonetlist,
+  alt.attr = "EDUC",
+  .f = mean, na.rm = TRUE
+)
+summary(mean_altereduc[, "result"])
+```
+
+# Ego networks as Predictors
+
+Exploring density and network size. Eg., predict network size as a function of one or more characteristics.
+
+Target `Happy`: 1 = very, 2 = pretty, 3 = not
+
+```{r}
+ego_dat$HAPPY_F <- factor(ego_dat$HAPPY,
+  levels = c(3, 2, 1),
+  labels = c(
+    "not too happy",
+    "pretty happy",
+    "very happy"
+  )
+)
+```
+
+```{r}
+ego_dat$RACE_F <- factor(ego_dat$RACE, levels = c(
+  "white", "asian",
+  "black", "hispanic",
+  "other"
+))
+ego_dat$SEX_F <- factor(ego_dat$SEX)
+```
+
+```{r}
+ego_dat$DENSITY <- dens[["density"]] #  getting values out of tibble format
+
+ego_dat$DENSITY <- dens[["density"]]
+ego_dat$RACE_DIVERSITY <- race_diversity[["entropy"]]
+ego_dat$MEAN_ALTEREDUC <- mean_altereduc[["result"]]
+```
+
+HAPPY is ordinal, so an ordered logistic regression or similar should be used. 
+
+```{r}
+#| message: false
+library(MASS)
+```
+
+```{r}
+ego_dat_nomiss <- na.omit(ego_dat[, c(
+  "HAPPY_F", "NUMGIVEN", "DENSITY",
+  "MEAN_ALTEREDUC", "RACE_DIVERSITY",
+  "EDUC", "AGE", "RACE_F",
+  "SEX_F"
+)])
+```
+
+```{r}
+summary(happy_mod1 <- polr(HAPPY_F ~ NUMGIVEN + DENSITY,
+  data = ego_dat_nomiss
+))
+```
+
+Density is more strongly correlated with Happiness than number of links.
+
+```{r}
+summary(happy_mod2 <- polr(
+  HAPPY_F ~ NUMGIVEN + DENSITY + EDUC + AGE +
+    RACE_F + SEX_F,
+  data = ego_dat_nomiss
+))
+```
+
+```{r}
+summary(happy_mod3 <- polr(
+  HAPPY_F ~ NUMGIVEN + DENSITY + EDUC + AGE +
+    RACE_F + SEX_F + MEAN_ALTEREDUC +
+    RACE_DIVERSITY,
+  data = ego_dat_nomiss
+))
+```
+
+ALTEREDUC is more important than EDUC
+
+# One input file
+
+```{r}
+url4 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/gss1985_egonetworks.csv"
+
+egonets <- read.csv(file = url4)
+head(egonets)
+```
+
+Right now, the NUMGIVEN column shows a 6 if they have 6+ ties. But as they only report on 5 alters, we will define their actual network size as 5 if they report having 6+ alters. 
+
+```{r}
+egonets$netsize <- ifelse(egonets$NUMGIVEN == 6, 5, egonets$NUMGIVEN)
+egonets <- egonets[!is.na(egonets$NUMGIVEN), ]
+```
+
+The ego network data frame is the first 13 colums
+
+```{r}
+ego_dat_fromonefile <- egonets[, 1:13]
+```
+
+```{r}
+create_alter_data <- function(egonets, netsize, var_names, egoID) {
+  # Arguments:
+  # egonets: ego network data frame
+  # netsize: vector of ego network size
+  # var_names: names of variables to put on alter data frame (assumed to be
+  # var.name1, var.name2, for each alter)
+  # egoID: name of id of ego on ego network data frame
+
+  # creating empty list to hold output for each variable:
+  overall_list <- list()
+
+  # taking out the isolates as they have no alters:
+  egonets_noisolates <- egonets[netsize > 0, ]
+
+  # redefining network size after taking out isolates:
+  netsize_updated <- netsize[netsize > 0]
+
+  # running over each variable name:
+  for (p in 1:length(var_names)) {
+    var_list <- list()
+    alter_list <- list()
+
+    # running over each ego:
+    for (x in 1:nrow(egonets_noisolates)) {
+      # getting alter id number:
+      alter_nums <- rep(1:netsize_updated[x], times = 1)
+
+      # Now we grab the alter columns for that ego and put those
+      # values in a larger list so we can stack them later on
+      # into one big vector (one for each variable of interest)
+      alt_cols <- paste(rep(var_names[p], each = netsize_updated[x]),
+        alter_nums,
+        sep = ""
+      )
+
+      var_list[[x]] <- egonets_noisolates[x, alt_cols]
+
+      alter_list[[x]] <- alter_nums
+    }
+
+    # stacking all alter values into one long column
+    var <- unlist(var_list)
+    overall_list[[p]] <- var
+  }
+
+  # putting all new variables together:
+  dat <- data.frame(do.call(data.frame, overall_list))
+
+  # putting useful column names on data frame
+  colnames(dat) <- var_names
+
+  # adding egoID and alterID to data frame:
+  dat <- cbind(
+    rep(egonets_noisolates[, egoID], netsize_updated),
+    unlist(alter_list), dat
+  )
+
+  colnames(dat)[1:2] <- c(egoID, "alterID")
+
+  return(dat)
+}
+```
+
+```{r}
+alter_dat_fromonefile <-
+  create_alter_data(
+    egonets = egonets,
+    netsize = egonets$netsize,
+    var_names = c(
+      "AGE", "EDUC", "RACE",
+      "SEX", "RELIG"
+    ),
+    egoID = "CASEID"
+  )
+head(alter_dat_fromonefile)
+```
+
+```{r}
+create_alteralter_data <- function(egonets, netsize, aa_tie_data,
+                                   egoID, max_alter) {
+  # Arguments:
+  # egonets: ego network data frame
+  # netsize: vector of ego network size
+  # aa_tie_data : data for each ego showing ties between alters;
+  # assumed to be ordered by 1-2; 1-3; 1-4; 1-5, etc. on the columns
+  # egoID: name of id of ego on ego network data frame
+  # max_alter: maximum of number of alter of which alter-alter tie
+  # data was reported on
+
+  overall_list <- list()
+
+  # taking out the isolates and those
+  # with only one alter as they have no alter-alter ties
+  egonets_noisolates <- egonets[netsize > 1, ]
+
+  # also taking out the
+  # isolates and those with only one alter
+  # for the alter-alter tie input data
+  alteralter_tie_data <- aa_tie_data[netsize > 1, ]
+
+  # redefining network size after taking out isolates:
+  netsize_updated <- netsize[netsize > 1]
+
+  # defining possible alter-alter ties
+  alter_ids <- t(combn(max_alter, 2))
+
+  # running over each ego:
+  for (x in 1:nrow(egonets_noisolates)) {
+    # First we create a data frame based on the ego ids, the possible
+    # alter-alter ties and the weights for each alter-alter tie,
+    # based on the  input data for that ego
+    alter_dat_row <- data.frame(
+      egoID = egonets_noisolates[x, egoID],
+      alter_ids,
+      weight = unlist(alteralter_tie_data[x, ])
+    )
+
+    # Here we reduce some of the rows (corresponding to alter-alter ties)
+    # if ego had less than the max number of alters or if some
+    # of the alter-alter ties are not present (assumed if value
+    # is equal to 0 or NA)
+    alter_dat_row <- alter_dat_row[alter_dat_row[, 2] <= netsize_updated[x] &
+      alter_dat_row[, 3] <= netsize_updated[x] &
+      !is.na(alter_dat_row$weight) &
+      alter_dat_row$weight != 0, ]
+
+    overall_list[[x]] <- alter_dat_row
+  }
+
+  # putting all alter-alter ties, by ego, in one data frame:
+  alter_alter_dat <- do.call(rbind, overall_list)
+
+  # putting useful column names on the data frame:
+  colnames(alter_alter_dat) <- c(egoID, "source", "target", "weight")
+  rownames(alter_alter_dat) <- 1:nrow(alter_alter_dat)
+
+  return(alter_alter_dat)
+}
+```
+
+```{r}
+aa_tie_data <- egonets[, 64:73]
+
+alteralter_dat_fromonefile <- create_alteralter_data(
+  egonets = egonets,
+  netsize = egonets$netsize,
+  aa_tie_data = aa_tie_data,
+  egoID = "CASEID",
+  max_alter = 5
+)
+head(alter_dat_fromonefile)
+```
+
+```{r}
+egonetlist2 <- egor(
+  alters = alter_dat_fromonefile,
+  egos = ego_dat_fromonefile,
+  aaties = alteralter_dat_fromonefile,
+  alter_design = list(max = 5),
+  ID.vars = list(
+    ego = "CASEID", alter = "alterID",
+    source = "source", target = "target"
+  )
+)
+egonetlist2
+```
+
+
+
+
+
+
+
+
+
+
+
