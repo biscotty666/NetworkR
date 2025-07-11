@@ -42,6 +42,7 @@
               reshape
               sna
               egor
+              car
               networkDynamic
               tsna
               pagedown

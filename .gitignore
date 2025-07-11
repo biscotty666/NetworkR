@@ -5,4 +5,5 @@
 .direnv
 .envrc
 data/
+docs/
 *.Rproj

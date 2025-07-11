@@ -1,0 +1,399 @@
+---
+title: "5.1 - Network Visualization"
+format: 
+  html:
+    toc: true
+    keep-md: true
+  gfm: default
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+```
+
+```{r}
+url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class555_edgelist.csv"
+
+class_edges <- read.csv(file = url1)
+
+url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class555_attributedata.csv"
+
+class_attributes <- read.csv(file = url2)
+```
+
+
+# Network Visualization
+
+# igraph
+
+```{r}
+#| message: false
+library(igraph)
+```
+
+```{r}
+class_net <- graph_from_data_frame(
+  d = class_edges, directed = T,
+  vertices = class_attributes
+)
+class_net
+```
+
+```{r}
+plot(class_net)
+```
+
+> Add color
+
+```{r}
+cols <- ifelse(class_attributes$gender == "Female", "lightskyblue", "navy")
+table(cols, class_attributes$gender)
+```
+
+```{r}
+V(class_net)$color <- cols
+plot(class_net)
+```
+
+Alternatively
+
+```{r}
+plot(class_net, vertex.color = cols)
+```
+
+> Which nodes receive the most nominations?
+
+```{r}
+indeg <- degree(class_net, mode = "in")
+plot(class_net, vertex.size = indeg, margin = -.1)
+```
+
+```{r}
+plot(class_net,
+  vertex.size = indeg + 3, vertex.label.color = "red",
+  margin = -.10
+)
+```
+
+```{r}
+class_net |>
+  plot(
+    vertex.size = indeg + 3, vertex.label = NA,
+    vertex.frame.color = NA, edge.arrow.size = .5,
+    edge.arrow.width = .75, edge.color = "light gray",
+    margin = -.10
+  )
+```
+
+> MDS-based layout
+
+```{r}
+class_net |>
+  plot(
+    vertex.size = indeg + 3, vertex.label = NA,
+    vertex.frame.color = NA, edge.arrow.size = .5,
+    edge.arrow.width = .75, edge.color = "light gray",
+    margin = -.10,
+    layout = layout_with_mds
+  )
+```
+
+> Kamada-Kawai layout
+
+```{r}
+class_net |>
+  plot(
+    vertex.size = indeg + 3, vertex.label = NA,
+    vertex.frame.color = NA, edge.arrow.size = .5,
+    edge.arrow.width = .75, edge.color = "light gray",
+    margin = -.10,
+    layout = layout_with_kk
+  )
+```
+
+# ggplot
+
+```{r}
+#| message: false
+detach(package:igraph)
+library(network)
+library(intergraph)
+library(ggplot2)
+library(GGally)
+```
+
+```{r}
+class_net_sna <- asNetwork(class_net)
+set.vertex.attribute(class_net_sna,
+  attrname = "indeg",
+  value = indeg
+)
+```
+
+## GGally
+
+```{r}
+ggnet2(class_net_sna,
+  node.size = indeg, node.color = cols,
+  edge.size = 0.5, edge.color = "grey80",
+  arrow.size = 3, arrow.gap = 0.02
+)
+```
+
+
+```{r}
+ggnet2(class_net_sna,
+  node.size = indeg, node.color = cols,
+  edge.size = 0.5, edge.color = "grey80",
+  arrow.size = 3, arrow.gap = 0.02
+) +
+  guides(size = "none")
+```
+
+```{r}
+ggnet2(class_net_sna,
+  node.size = indeg, node.color = "gender",
+  palette = c("Male" = "navy", "Female" = "lightskyblue"),
+  edge.size = 0.5, edge.color = "grey80",
+  arrow.size = 3, arrow.gap = 0.02
+) +
+  guides(size = "none")
+```
+
+```{r}
+ggnet2(class_net_sna,
+  node.size = indeg, node.color = "gender",
+  palette = c("Male" = "navy", "Female" = "lightskyblue"),
+  edge.size = 0.5, edge.color = c("color", "grey80"),
+  arrow.size = 3, arrow.gap = 0.02
+) +
+  guides(size = "none")
+```
+
+## ggnetwork
+
+```{r}
+library(ggnetwork)
+```
+
+```{r}
+ggplot(
+  class_net_sna,
+  aes(x = x, y = y, xend = xend, yend = yend)
+) +
+  geom_edges(
+    color = "lightgrey",
+    arrow = arrow(length = unit(7.5, "pt"), type = "closed")
+  ) +
+  geom_nodes(color = cols, size = indeg + 3) +
+  theme_blank()
+```
+
+# Contour plots
+
+```{r}
+ggplot(class_net_sna,
+  arrow.gap = 0.01,
+  aes(x = x, y = y, xend = xend, yend = yend)
+) +
+  geom_edges(
+    color = "lightgrey",
+    arrow = arrow(length = unit(5, "pt"), type = "closed")
+  ) +
+  geom_nodes(color = cols) +
+  theme_blank() +
+  geom_density2d()
+```
+
+# Interactive plots
+
+```{r}
+#| message: false
+library(networkD3)
+```
+
+The networkD3 package indexes the nodes starting from 0 (rather than 1) so we need to create an edgelist and attribute file that starts the ids with 0.
+
+```{r}
+class_edges_zeroindex <- class_edges[, c("sender", "receiver")] - 1
+
+class_attributes_zeroindex <- data.frame(
+  id = class_attributes$id - 1,
+  indeg = indeg,
+  gender = class_attributes$gender
+)
+```
+
+```{r}
+forceNetwork(
+  Links = class_edges_zeroindex,
+  Nodes = class_attributes_zeroindex,
+  Source = "sender", Target = "receiver",
+  Group = "gender", Nodesize = "indeg", NodeID = "id",
+  opacity = 0.9, bounded = FALSE, opacityNoHover = 0.2
+)
+```
+
+# Dynamic network visualizations
+
+```{r}
+url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/example_edge_spells.csv"
+
+edge_spells <- read.csv(file = url3)
+head(edge_spells)
+```
+
+```{r}
+url4 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/example_vertex_spells.csv"
+
+vertex_spells <- read.csv(file = url4)
+head(vertex_spells)
+```
+
+```{r}
+url5 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class_attributes.txt"
+
+attributes_example2 <- read.table(file = url5, header = T)
+head(attributes_example2)
+```
+
+```{r}
+#| message: false
+library(networkDynamic)
+```
+
+```{r}
+net_dynamic_interactions <- networkDynamic(
+  vertex.spells = vertex_spells,
+  edge.spells = edge_spells
+)
+```
+
+## Time flattened
+
+Split the network by time intervals
+
+```{r}
+extract_nets <- get.networks(
+  net_dynamic_interactions,
+  start = 0, time.increment = 20
+)
+extract_nets
+```
+
+```{r}
+cols_example2 <- ifelse(attributes_example2$gnd == 2, "lightskyblue", "navy")
+```
+
+```{r}
+par(mfrow = c(1, 2))
+
+plot(extract_nets[[1]],
+  main = "Talk to Network, 0-20 mins",
+  vertex.col = cols_example2, vertex.cex = 2
+)
+
+plot(extract_nets[[2]],
+  main = "Talk to Network, 20-40 mins",
+  vertex.col = cols_example2, vertex.cex = 2
+)
+```
+
+> Consistent layout accross periods
+
+```{r}
+locs <- network.layout.fruchtermanreingold(extract_nets[[1]], layout.par = NULL)
+
+par(mfrow = c(1, 2))
+
+plot(extract_nets[[1]],
+  main = "Talk to Network, 0-20 mins",
+  vertex.col = cols_example2, vertex.cex = 2, coord = locs
+)
+
+plot(extract_nets[[2]],
+  main = "Talk to Network, 20-40 mins",
+  vertex.col = cols_example2, vertex.cex = 2, coord = locs
+)
+```
+
+## Dynamic network movies
+
+```{r}
+#| message: false
+library(ndtv)
+```
+
+```{r}
+slice_par <- list(
+  start = 0, end = 43, interval = 1,
+  aggregate.dur = 0, rule = "latest"
+)
+
+set.network.attribute(net_dynamic_interactions, "slice.par", slice_par)
+```
+
+```{r}
+#| message: false
+render.d3movie(
+  net_dynamic_interactions,
+  displaylables = FALSE,
+  vertex.cex = 1.5, output.mode = "HTML",
+  filename = "classroom_movie_1.html"
+)
+```
+
+```{r}
+#| message: false
+slice_par <- list(
+  start = 0, end = 43, interval = 1,
+  aggregate.dur = 1, rule = "latest"
+)
+
+set.network.attribute(net_dynamic_interactions, "slice.par", slice_par)
+
+render.d3movie(net_dynamic_interactions,
+  displaylabels = FALSE,
+  vertex.cex = 1.5, vertex.col = cols,
+  output.mode = "HTML", filename = "classroom_movie2.html"
+)
+```
+
+> Longer time periods
+
+```{r}
+#| message: false
+slice_par <- list(
+  start = 0, end = 43, interval = 10,
+  aggregate.dur = 10, rule = "latest"
+)
+
+set.network.attribute(net_dynamic_interactions, "slice.par", slice_par)
+
+render.d3movie(net_dynamic_interactions,
+  displaylabels = FALSE,
+  vertex.cex = 1.5, vertex.col = cols,
+  output.mode = "HTML", filename = "classroom_movie2.html"
+)
+```
+
+```{r}
+#| message: false
+slice_par <- list(
+  start = 0, end = 43, interval = 1,
+  aggregate.dur = 10, rule = "latest"
+)
+
+set.network.attribute(net_dynamic_interactions, "slice.par", slice_par)
+
+render.d3movie(net_dynamic_interactions,
+  displaylabels = FALSE,
+  vertex.cex = 1.5, vertex.col = cols,
+  output.mode = "HTML", filename = "classroom_movie2.html"
+)
+```
+
+
+
+
