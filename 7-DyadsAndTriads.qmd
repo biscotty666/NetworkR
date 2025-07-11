@@ -1,0 +1,353 @@
+---
+title: "Dyads and Triads"
+format: 
+  html:
+    toc: true
+    keep-md: true
+  gfm: default
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+options(digits = 5)
+```
+
+# Dyads and Triads
+
+We will make use of a data set collected by David Krackhardt. The data are based on three relations collected on workers in a single organization. Krackhardt asked employees at a high-tech firm that was undergoing a union certification campaign, to whom they reported, with whom they were friends, and to whom they go to for advice. These relationships provide insight into the firm's embedded social structure, which may play a strong role in shaping opinion and opinion change.
+
+```{r}
+url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/krackhardt_advice.csv"
+
+advice_data_frame <- read.csv(file = url1)
+head(advice_data_frame)
+```
+
+Subset that full data frame to only keep those cases where a tie exists, thus giving us the edgelist for this network.
+
+```{r}
+advice_edgelist <- advice_data_frame[advice_data_frame$advice_tie == 1, ]
+```
+
+```{r}
+url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/krackhardt_attributes.csv"
+
+attributes <- read.csv(file = url2)
+attributes
+```
+
+```{r}
+#| message: false
+library(sna)
+```
+
+```{r}
+krack_advice <- network(
+  x = advice_edgelist, directed = T,
+  vertices = attributes
+)
+krack_advice
+```
+
+```{r}
+url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/krackhardt_friendship.csv"
+
+friends_data_frame <- read.csv(file = url3)
+head(friends_data_frame)
+```
+
+```{r}
+friends_edgelist <- friends_data_frame[friends_data_frame$friendship_tie == 1, ]
+
+krack_friendship <- network(
+  x = friends_edgelist, directed = T,
+  vertices = attributes
+)
+```
+
+```{r}
+#| message: false
+library(GGally)
+```
+
+```{r}
+indeg_advice <- degree(krack_advice, cmode = "indegree")
+```
+
+```{r}
+ggnet2(krack_advice,
+  node.color = "LEVEL", node.size = indeg_advice,
+  palette = c("1" = "navy", "2" = "blue", "3" = "lightskyblue"),
+  edge.size = .5, edge.color = "grey80",
+  arrow.size = 3, arrow.gap = 0.02
+) +
+  guides(size = "none")
+```
+
+```{r}
+indeg_friendship <- degree(krack_friendship, "indegree")
+
+ggnet2(krack_friendship,
+  node.color = "LEVEL", node.size = indeg_friendship,
+  palette = c("1" = "navy", "2" = "blue", "3" = "lightskyblue"),
+  edge.size = .5, edge.color = "grey80",
+  arrow.size = 3, arrow.gap = 0.02
+) +
+  guides(size = "none")
+```
+
+# Dyadic Processes
+
+## Dyad Census and Reciprocity
+
+Characterizes each dyad as null, asymmetric, or mutual.
+
+```{r}
+dyadcensus_friendship <- dyad.census(krack_friendship)
+dyadcensus_friendship
+dyadcensus_friendship[, "Mut"] / (dyadcensus_friendship[, "Mut"] +
+  dyadcensus_friendship[, "Asym"])
+```
+
+```{r}
+recip_friendship <- grecip(krack_friendship, measure = "dyadic.nonnull")
+recip_friendship
+```
+
+```{r}
+recip_advice <- grecip(dat = krack_advice, measure = "dyadic.nonnull")
+recip_advice
+```
+
+## Conditional Uniform Graph Tests
+
+Baseline comparisons
+
+```{r}
+cug_recip <- cug.test(
+  dat = krack_friendship, FUN = grecip,
+  mode = c("digraph"),
+  cmode = c("edges"), reps = 1000,
+  FUN.args = list(measure = "dyadic.nonnull")
+)
+cug_recip
+```
+
+```{r}
+cug_recip$obs.stat
+```
+
+```{r}
+summary(cug_recip$rep.stat)
+```
+
+The observed stat is higher than all randomily simulated networks, invlidating the null-hypothesis.
+
+## Dyad Census by Node Attributes
+
+Exploring reciprocity
+
+For example, we can ask if cross-gender ties are more/less likely to be reciprocated.
+
+```{r}
+table(attributes$LEVEL)
+```
+
+The question is how does the social structure, based on friendship or advice, map onto the organizational structure, where some people are in positions of authority and most are not. 
+
+Calculate dyad census seperately for each level. to see if mutual dyad frequency is higher or lower if the people are at the same level.
+
+```{r}
+same_level <- outer(attributes$LEVEL, attributes$LEVEL, "==")
+```
+
+Now, we need to construct a matrix that shows if each i-j pair is null, asymmetric or mutual. 
+
+```{r}
+dyad_matrix <- function(dat) {
+  mat <- as.matrix(dat)
+  diag(mat) <- NA
+  # Next, we do a little trick where we take the matrix and
+  # add it to its transpose, yielding a matrix of 0s, 1s
+  # and 2s. If it is null, the resulting value will be 0
+  # (neither ij nor ji exists); if it is asymmetric there
+  # will be a 1 (as ij or ji exists but not both); and
+  # if it is mutual there will be a 2 (as there are ties
+  # from ij and ji).
+  dyad_mat <- mat + t(mat)
+
+  dyad_mat[dyad_mat == 0] <- "null"
+  dyad_mat[dyad_mat == 1] <- "asym"
+  dyad_mat[dyad_mat == 2] <- "mut"
+
+  dyad_mat
+}
+```
+
+```{r}
+friends_dyads <- dyad_matrix(krack_friendship)
+friends_dyads[1:5, 1:5]
+```
+
+```{r}
+table(friends_dyads) / 2
+```
+
+```{r}
+table(friends_dyads[same_level == TRUE]) / 2
+```
+
+```{r}
+table(friends_dyads[same_level == FALSE]) / 2
+```
+
+Cross-level connections show a much lower reciprocity level.
+
+## Advice and Friendship Together
+
+Are there joint rules governing advice and friendship?
+
+```{r}
+advice_dyads <- dyad_matrix(krack_advice)
+advice_dyads[1:5, 1:5]
+```
+
+```{r}
+table(friends_dyads, advice_dyads) / 2
+```
+
+# Triadic Processes
+
+## Triad Census
+
+There are 16 different triad types:
+
+    003 A, B, C, empty triad
+    012 A->B, C
+    102 A<->B, C
+    021D A<-B->C
+    021U A->B<-C
+    021C A->B->C
+    111D A<->B<-C
+    111U A<->B->C
+    030T A->B<-C, A->C
+    030C A<-B<-C, A->C
+    201 A<->B<->C
+    120D A<-B->C, A<->C
+    120U A->B<-C, A<->C
+    120C A->B->C, A<->C
+    210 A->B<->C, A<->C
+    300 A<->B<->C, A<->C, completely connected
+
+```{r}
+triads_friendship <- triad.census(krack_friendship)
+triads_friendship
+```
+
+```{r}
+triads_advice <- triad.census(krack_advice)
+triads_advice
+```
+
+```{r}
+options(digits = 3)
+triad_data <- data.frame(
+  advice = t(triads_advice),
+  friendship = t(triads_friendship)
+)
+triad_data$ratio <- triad_data$advice / triad_data$friendship
+triad_data
+```
+
+Note that the total number of triads in each network is the same, making comparisons easier. There are a number of things one could highlight between the two networks, but one striking difference is in the 030T triad, A->B<-C, A->C. The advice network has a much higher proportion of 030T triads than the friendship network, suggestive of an underlying hierarchy of advice less present in the friendship network; where A gives advice to B and C and C gives advice to B and B simply receives advice from others. The underlying hierarchy in this advice relation thus runs: A to C to B, as A influences B and C, C influences only B and B influences no one. Such a pattern of hierarchy does not emerge as clearly in the friendship network. In general, the triads associated with transitive dominance relations (021D, 120D, 021U, 030T, 120U) are more likely to be present in the advice network than the friendship network. Note that we need to be a little careful in pushing that conclusion too far, as the networks have different levels of density (and possibly reciprocity) that may be driving the differences we observe in the triad count. We need to take these baseline differences into account before formally interpreting the triad counts. Here, we will utilize a CUG test to compare the triad census to what we might expect by chance, if people randomly formed ties. We discuss other, more complex, options in future chapters,
+
+We use the same cug.test() function as we used above when looking at reciprocity. The main difference is that here we condition the random networks in a different way. In this case we will condition on the dyad census, to see how the counts of the triad census differ above what we expect from a network of the same size, density and dyadic tendencies (i.e., same rate of reciprocity). Our particular question is if different specific triad types show up more (or less) than we expect in a random network, conditioned on those features. 
+
+```{r}
+count_triads <- function(dat, triad_names) {
+  triads <- triad.census(dat)
+  triads[1, triad_names]
+}
+```
+
+```{r}
+count_triads(krack_advice, triad_names = c("030T"))
+```
+
+```{r}
+cug_triads_advice <- cug.test(
+  krack_advice,
+  FUN = count_triads,
+  mode = c("digraph"),
+  cmode = c("dyad.census"), reps = 1000,
+  FUN.args = list(triad_names = c("030T"))
+)
+cug_triads_advice
+```
+
+In all 1000 random networks, the observed count is above that seen in the randomly generated network (P(X >= Obs) is equal to 0). This means that the tendency for A to give advice to B and C and then C to give advice to B cannot be accounted for based simply on the density of advice relations and expectations of reciprocity. 
+
+```{r}
+cug_triads_friendship <- cug.test(krack_friendship,
+  FUN = count_triads,
+  mode = c("digraph"),
+  cmode = c("dyad.census"), reps = 1000,
+  FUN.args = list(triad_names = c("030T"))
+)
+cug_triads_friendship
+```
+
+Here the observed value is possible based on the random networks, but not certain.
+
+```{r}
+cug_triads_friendship$obs.stat
+```
+
+```{r}
+summary(cug_triads_friendship$rep.stat)
+```
+
+Let’s consider 120U (A->B<-C, A<->C). In this case A and C have a reciprocated friendship. They also both nominate B who does not nominate them back. 
+
+```{r}
+cug_triads_friendship2 <- cug.test(krack_friendship,
+  FUN = count_triads,
+  mode = c("digraph"),
+  cmode = c("dyad.census"), reps = 1000,
+  FUN.args = list(triad_names = c("120U"))
+)
+cug_triads_friendship2
+```
+
+The observed is above that expected by chance in all networks.
+
+Overall, it would appear that the advice network is built around dominance type relations in a way that the friendship network is not. Individuals give advice in a way that follows patterns of status; where, for example, A gives advice ‘down the line’ to B and C. In contrast, the friendship network, at least in our short analysis, is consistent with balancing relations, where if two nodes are strong friends, they will tend to agree (in terms of liking or not liking) third party nodes, even if that third party does not return the friendship. This was not captured very well in the dyadic analysis, where the reciprocity rates were pretty similar in the two networks.
+
+```{r}
+source("CUGtest_alltriads.R")
+```
+```{r}
+CUG_test_table <- CUGtest_alltriads(
+  dat = krack_friendship,
+  mode = "digraph",
+  cmode = "dyad.census", reps = 1000
+)
+CUG_test_table
+```
+
+## Transitivity
+
+```{r}
+gtrans(krack_advice, measure = "weak")
+```
+
+"weak" calculates the proportion of transitive triads divided by the number of potentially intransitive triads, defined as triads where i -> j and j -> k; the strong version divides by the total number of triads.
+
+
+
+
+
+
+
+
