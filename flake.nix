@@ -41,6 +41,7 @@
               intergraph
               reshape
               sna
+              ergm
               egor
               car
               networkDynamic

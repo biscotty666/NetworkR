@@ -1,0 +1,531 @@
+---
+title: "Network Centrality and Hierarchy"
+format: 
+  html:
+    toc: true
+    keep-md: true
+  gfm: default
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+options(digits = 5)
+```
+
+# Setup
+
+```{r}
+#| message: false
+library(igraph)
+```
+
+```{r}
+url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/social_interactions_s641.csv"
+
+social_data <- read.csv(file = url1)
+head(social_data)
+```
+
+Only consider dyads which have interacted
+
+```{r}
+edgelist_social <- social_data[social_data$social_tie > 0, ]
+head(edgelist_social)
+```
+
+```{r}
+s641_social <- graph_from_data_frame(
+  d = edgelist_social, directed = T,
+  vertices = (id <- 1:max(edgelist_social$ego))
+)
+```
+
+```{r}
+net641_social_noisolates <- graph_from_data_frame(
+  d = edgelist_social,
+  directed = T
+)
+```
+
+```{r}
+url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/task_interactions_s641.csv"
+
+task_data <- read.csv(file = url2)
+head(task_data)
+```
+
+```{r}
+edgelist_task <- task_data[task_data$task_tie > 0, ]
+# reduce edgelist so each is only mentioned once
+edgelist_task <- edgelist_task[edgelist_task$ego < edgelist_task$alter, ]
+s641_task <- graph_from_data_frame(
+  d = edgelist_task, directed = F,
+  vertices = (id <- 1:22)
+)
+```
+
+
+```{r}
+par(mfrow = c(1, 2))
+
+plot(s641_social,
+  vertex.frame.color = NA, vertex.size = 8,
+  edge.arrow.size = 0.25, main = "Social Interactions"
+)
+
+plot(s641_task,
+  vertex.frame.color = NA, vertex.size = 8,
+  edge.arrow.size = 0.25, main = "Task Interactions"
+)
+```
+
+Our main substantive goal is to determine which nodes are most important in the classroom and how (or if) this varies across network relation and measure of centrality. Are individuals who are prominent in the task network also prominent in the social interaction network? Which nodes act as bridges? Are they the same nodes with the highest degree? We also want to uncover something about the overall level of inequality and hierarchy that exists in this classroom. Is this a world where one node dominates?
+
+# Centrality
+
+## Centrality measures for Social Interactions
+
+```{r}
+indegree_social <- degree(graph = s641_social, mode = "in")
+head(indegree_social)
+```
+
+```{r}
+outdegree_social <- degree(graph = s641_social, mode = "out")
+head(outdegree_social)
+```
+
+Closeness is the inverse of the mean geodesic distance between a given node and all other nodes. In-closeness and out-closeness are the average number of steps to all other reachable nodes.
+
+```{r}
+outcloseness_social <- closeness(
+  graph = s641_social,
+  mode = "out",
+  normalized = T
+)
+head(outcloseness_social)
+```
+
+```{r}
+incloseness_social <- closeness(
+  graph = s641_social, mode = "in",
+  normalized = T
+)
+head(incloseness_social)
+```
+
+Alternatively, take the main based on the inverse distance matrix. Avoids needing to exclude unreachable nodes, so better for disconnected graphs.
+
+```{r}
+dist_mat_social <- distances(graph = s641_social, mode = "out")
+diag(dist_mat_social) <- NA
+dist_mat_social_inverted <- 1 / dist_mat_social
+```
+
+```{r}
+outcloseness_social2 <- apply(dist_mat_social_inverted,
+  MARGIN = 1,
+  FUN = mean, na.rm = T
+)
+head(outcloseness_social2)
+```
+
+```{r}
+cor(outcloseness_social, outcloseness_social2, use = "complete.obs")
+```
+
+This is the case as the original calculation (outcloseness_social) calculates closeness only including the reachable nodes for each actor. This means that nodes like 4, 8, 11 and 15 get surprisingly high closeness values (1), as they reach only one other node at distance 1. This might not be what we want as these nodes are, in fact, not very central in the network (see figure above) but are assigned a high centrality value. The alternative version of out-closeness handles this better and assigns a low value for these nodes. If we remove those 'odd' cases, the two versions are very highly correlated:
+
+```{r}
+cor(outcloseness_social[-c(4, 8, 11, 15)],
+  outcloseness_social2[-c(4, 8, 11, 15)],
+  use = "complete.obs"
+)
+```
+
+```{r}
+incloseness_social2 <- apply(dist_mat_social_inverted,
+  MARGIN = 2,
+  FUN = mean, na.rm = T
+)
+head(incloseness_social2)
+```
+
+> betweenness
+
+the number of possible paths a node could be between.
+
+```{r}
+betweenness_social <- betweenness(graph = s641_social, normalized = F)
+head(betweenness_social)
+```
+
+## Eigenvector centrality
+
+Gives greater weight to nodes connected to other highly-connected nodes. A measure of a node's importance.
+
+```{r}
+s641_social_undirected <- as_undirected(s641_social, mode = "collapse")
+```
+```{r}
+ev_obj_social <- eigen_centrality(s641_social_undirected)
+eigen_social <- ev_obj_social$vector
+head(eigen_social)
+```
+
+```{r}
+ids <- V(s641_social)$name
+```
+
+```{r}
+central_social <- data.frame(
+  ids = ids, net = "social",
+  indegree = indegree_social,
+  outdegree = outdegree_social,
+  incloseness2 = incloseness_social2,
+  outcloseness2 = outcloseness_social2,
+  between = betweenness_social,
+  eigen = eigen_social
+)
+head(central_social)
+```
+
+> find the most central nodes based on the various measures
+
+sort all columns at once
+
+```{r}
+apply(central_social[, -(1:2)],
+  MARGIN = 2,
+  FUN = order, decreasing = T
+)
+```
+
+```{r}
+library(reshape)
+```
+
+```{r}
+vars_to_stack <- c("ids", "indegree", "incloseness2", "between", "eigen")
+
+social_long <- melt(central_social[, vars_to_stack], id.vars = "ids")
+str(social_long)
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(social_long, aes(x = factor(ids, levels = 1:length(ids)), y = value)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~variable, scales = "free_y", ncol = 2) +
+  labs(
+    x = "Ids", y = "Centrality"
+  ) +
+  theme(axis.text = element_text(size = 0.5))
+```
+
+Note that, while a number of nodes have prominence, only node 22 plays a bridging role.
+
+```{r}
+plot(s641_social,
+  layout = layout.fruchterman.reingold,
+  vertex.label = V(s641_social)$name, vertex.size = central_social$between / 5,
+  edge.arrow.size = 0.25, margin = -0.08,
+  main = "Classroom S641 Social Talk"
+)
+```
+
+## Correlations between Centrality Measures
+
+Computing correlations between centrality scores. Which measures yield the same nodes as central, and which disagree.
+
+```{r}
+cor_tab1 <- cor(central_social[, -c(1, 2)])
+round(cor_tab1, 3)
+```
+
+Indegree and outdegree are highly correlated. People tend to answer each other in social interations. Both are also highly correlated with eigenvector centrality indicating that the students that talk the most to others (or, relatedly, are talked to the most by others) are also the ones that are connected to other highly connected students -- possibly indicating high density cliques around these individuals. 
+
+## Centrality for Task Interactions
+
+```{r}
+degree_task <- degree(s641_task)
+
+dist_mat_task <- distances(graph = s641_task)
+diag(dist_mat_task) <- NA
+dist_mat_task_inverted <- 1 / dist_mat_task
+
+closenness_task2 <- apply(dist_mat_task_inverted,
+  MARGIN = 1,
+  FUN = mean, na.rm = T
+)
+
+betweenness_task <- betweenness(s641_task, normalized = F)
+
+ev_obj_task <- eigen_centrality(s641_task)
+
+eigen_task <- ev_obj_task$vector
+```
+
+
+```{r}
+central_task <- data.frame(
+  ids = ids, net = "task",
+  degree = degree_task,
+  closeness2 = closenness_task2,
+  between = betweenness_task,
+  eigen = eigen_task
+)
+head(central_task)
+```
+
+Look at nodes with top centrality scores.
+
+```{r}
+apply(central_task[, -c(1, 2)],
+  MARGIN = 2,
+  FUN = order, decreasing = T
+)
+```
+
+```{r}
+plot(s641_task,
+  vertex.size = central_task$degree, vertex.label = V(s641_social)$name,
+  edge.arrow.size = 0.25, layout = layout.fruchterman.reingold,
+  main = "Classroom S641 Task Interations", margin = -0.08
+)
+```
+
+## Task/Social Correlations
+
+```{r}
+vars_to_stack_task <- c("ids", "degree", "closeness2", "between", "eigen")
+task_long <- melt(central_task[, vars_to_stack_task], id.vars = "ids")
+head(task_long)
+```
+
+```{r}
+task_long$net <- "task"
+social_long$net <- "social"
+social_task_long <- rbind(social_long, task_long)
+```
+```{r}
+#| message: false
+library(car)
+```
+
+```{r}
+social_task_long$variable <- recode(social_task_long$variable,
+  as.factor = T,
+  "'incloseness2' = 'closeness2';
+                                    'indegree' = 'degree'",
+  levels = c(
+    "degree", "closeness2",
+    "between", "eigen"
+  )
+)
+```
+
+```{r}
+ggplot(
+  social_task_long,
+  aes(
+    x = factor(ids, levels = 1:length(ids)),
+    y = value, fill = net
+  )
+) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~variable, scales = "free_y", ncol = 2) +
+  scale_fill_discrete(
+    name = "Network",
+    breaks = c("social", "task"),
+    labels = c("Social", "Task")
+  ) +
+  xlab("Ids") +
+  ylab("Centrality") +
+  theme(axis.text = element_text(size = 6.5))
+```
+
+```{r}
+cor_tab2 <- cor(central_social[, -c(1, 2)], central_task[, -c(1, 2)])
+rownames(cor_tab2) <- paste(rownames(cor_tab2), "social", sep = "_")
+colnames(cor_tab2) <- paste(colnames(cor_tab2), "task", sep = "_")
+round(cor_tab2[, c("eigen_task", "degree_task", "closeness2_task")], 3)
+```
+
+# Centralization
+
+Summarize the distribution of centrality measures.
+
+```{r}
+summary(indegree_social)
+summary(degree_task)
+sd(indegree_social)
+sd(degree_task)
+```
+
+The distribution shows that social interactions are more widely spread while tasks is focused on one node.
+
+The standard deviation is a measure of centralization. To calculate centralization, we take the centrality scores of interest and sum up the total deviations from the highest value. We then typically divide the total summation by the maximum possible level of centralization in a network of that size (i.e., the centralization we would have observed in a hub and spoke structure).
+
+Each score has its own function.
+
+```{r}
+cent_social <- centr_degree(
+  graph = s641_social, mode = "in",
+  loops = FALSE, normalized = TRUE
+)
+cent_social
+```
+
+```{r}
+sum(rep(length(cent_social$res) - 1, length(cent_social$res) - 1))
+```
+
+
+Or
+
+```{r}
+sum(max(indegree_social) - indegree_social) / sum(21 - rep(0, 21))
+```
+
+```{r}
+cent_task <- centr_degree(
+  graph = s641_task,
+  loops = FALSE, normalized = TRUE
+)
+cent_task
+```
+
+The theoretical max is different because the task network was treated as undirected.
+
+```{r}
+den_social <- density(indegree_social, from = 0)
+den_task <- density(degree_task, from = 0)
+```
+
+```{r}
+plot(range(den_social$x, den_task$x), range(den_social$y, den_task$y),
+  type = "n", xlab = "degree", ylab = "density",
+  main = "Degree Distribution fo Social and Task Networks"
+)
+
+lines(den_social, col = "red", lty = 2, lwd = 2)
+lines(den_task, col = "lightblue", lty = 2, lwd = 2)
+
+legend("topright", c("Social", "Task"),
+  col = c("red", "lightblue", lty = 2, lwd = 2)
+)
+```
+
+More generally, our centrality and centralization analyses paint a picture of two different kinds of interactional tendencies. For the social interaction network, we have a set of divided groups bridged by one focal node with high betweenness. Within each group there are prominent nodes with high degree, closeness, etc. but only one node holds the whole network together. For the task network, there is only one focal node, with everyone doing task interactions with them and few interactions happening otherwise.
+
+# Clustering and Hierarchy
+
+Are groups heirarchically organized? The tau statistic is a z-score which captures how micro processes aggregate to create macro structures.
+
+```{r}
+library(intergraph)
+```
+
+```{r}
+s641_social_network <- asNetwork(s641_social)
+source("tau_functions.R")
+```
+
+Triad types:
+    003 A, B, C, empty triad.
+    012 A->B, C
+    102 A<->B, C
+    021D A<-B->C
+    021U A->B<-C
+    021C A->B->C
+    111D A<->B<-C
+    111U A<->B->C
+    030T A->B<-C, A->C
+    030C A<-B<-C, A->C.
+    201 A<->B<->C.
+    120D A<-B->C, A<->C.
+    120U A->B<-C, A<->C.
+    120C A->B->C, A<->C.
+    210 A->B<->C, A<->C.
+    300 A<->B<->C, A<->C, completely connected.
+
+
+```{r}
+#| message: false
+library(ergm)
+library(sna)
+```
+
+Test 3 hypotheses, each represented by a vector of which triads should be summed and compared to baseline.
+
+  ranked clustering 
+    - higher rates of 003, 102, 021D, 021U, 030T, 120D, 120U, 300
+    - mutual ties within groups
+    - asymetric accross groups, lower status send to higher status, not vice versa
+
+
+```{r}
+weights_rankedcluster <- c(1, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1)
+```
+
+  clustering
+    - higher rates of 003, 102 and 300
+    - does not include triads that create hierarchies (021U, 120U, etc)
+
+```{r}
+weights_cluster <- c(1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
+```
+
+  balanced
+    - only includes 102 and 300
+    - implies that only 2 groups should emerge
+    
+```{r}
+weights_balance <- c(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
+```
+
+```{r}
+tau_ranked_cluster <- tau_stat_function(
+  network = s641_social_network,
+  weight.vector = weights_rankedcluster
+)
+tau_ranked_cluster
+```
+
+```{r}
+tau_cluster <- tau_stat_function(
+  network = s641_social_network,
+  weight.vector = weights_cluster
+)
+tau_cluster
+```
+
+```{r}
+tau_balance <- tau_stat_function(
+  network = s641_social_network,
+  weight.vector = weights_balance
+)
+tau_balance
+```
+
+Tau statistics over 2 support the hypothesis in question.
+
+Consider the triads in the ranked cluster but not the cluster.
+
+```{r}
+triad_names <- c(
+  "triadcensus.021D", "triadcensus.021U", "triadcensus.030T",
+  "triadcensus.120D", "triadcensus.120U"
+)
+
+tau_ranked_cluster[[2]][rownames(tau_ranked_cluster[[2]]) %in% triad_names, ]
+```
+
+As the observed values are similar to expected, and most 0, they do not add to the model.
+
+This suggests that the overall network is grouped but non-heirarchical.
+
+
