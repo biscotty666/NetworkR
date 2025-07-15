@@ -1,0 +1,577 @@
+---
+title: "Positions and Roles"
+format: 
+  html:
+    toc: true
+    keep-md: true
+  gfm: default
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+options(digits = 5)
+```
+
+Goal: position nodes based on patterns of ties to others and describe the patterns or roles that exist between nodes and groups of nodes.
+
+Our main substantive goal is to describe the role structure that exists in this classroom. How do different sets of nodes relate to one another within the larger functioning of the classroom? What are the rights and responsibilities of one set relative to another? As this is a classroom, the rights and responsibilities pertain to expectations of social interaction (do nodes in one set have positive social interactions with nodes in another?) as well as task interactions. For example, is this is a system where students tend to break off into separate friendship groups that also map onto task interactions? Or perhaps there are certain alliances, where certain friendship groups come together to complete work in the classroom. Or maybe there is a single, important node (like the teacher) that is crucial in holding the classroom together.
+
+# Setup
+
+```{r}
+#| message: false
+library(igraph)
+```
+
+```{r}
+url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class182_networkdata.csv"
+
+class182_networkdata <- read.csv(file = url1)
+head(class182_networkdata)
+```
+
+```{r}
+url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class182_attributedata.csv"
+
+class182_attributes <- read.csv(file = url2)
+head(class182_attributes)
+```
+
+```{r}
+edgelist_friendship <- class182_networkdata[
+  class182_networkdata$friend_tie > 0,
+  c("ego", "alter", "friend_tie")
+]
+head(edgelist_friendship)
+```
+
+```{r}
+net182_friend <-
+  graph_from_data_frame(
+    d = edgelist_friendship, directed = T,
+    vertices = class182_attributes
+  )
+net182_friend
+```
+
+```{r}
+edgelist_task <- class182_networkdata[
+  class182_networkdata$task_tie > 0,
+  c("ego", "alter", "task_tie")
+]
+```
+
+The task network should be undirected, but an intermediate directed graph is constructed first.
+
+```{r}
+net182_task <-
+  graph_from_data_frame(
+    d = edgelist_task, directed = T,
+    vertices = class182_attributes
+  ) |>
+  as_undirected(
+    mode = "collapse",
+    edge.attr.comb = "mean"
+  )
+net182_task
+```
+
+```{r}
+edgelist_social <- class182_networkdata[
+  class182_networkdata$social_tie > 0,
+  c("ego", "alter", "social_tie")
+]
+
+net182_social <-
+  graph_from_data_frame(
+    d = edgelist_social, directed = T,
+    vertices = class182_attributes
+  ) |>
+  as_undirected(
+    mode = "collapse",
+    edge.attr.comb = "mean"
+  )
+```
+
+# Getting the data ready
+
+The first step is to place nodes into structuraly equivalent positions, where nodes who are tied to similar nodes are placed in the same position.
+
+```{r}
+friend_mat <- as_adjacency_matrix(net182_friend, attr = "friend_tie", sparse = F)
+task_mat <- as_adjacency_matrix(net182_task, attr = "task_tie", sparse = F)
+social_mat <- as_adjacency_matrix(net182_social, attr = "social_tie", sparse = F)
+```
+
+```{r}
+friend_mat
+```
+
+```{r}
+friend_mat_in <- t(friend_mat)
+```
+Since task/social interations are undirected there is no need to transpose them.
+
+```{r}
+standardize <- function(matrix) {
+  (matrix - mean(matrix)) / sd(matrix)
+}
+
+friend_mat_std <- standardize(friend_mat)
+friend_mat_in_std <- standardize(friend_mat_in)
+task_mat_std <- standardize(task_mat)
+social_mat_std <- standardize(social_mat)
+```
+
+```{r}
+friends_task_social_std <- cbind(
+  friend_mat_std, friend_mat_in_std,
+  task_mat_std, social_mat_std
+)
+dim(friends_task_social_std)
+```
+
+```{r}
+friends_task_social <- cbind(
+  friend_mat, friend_mat_in,
+  task_mat, social_mat
+)
+```
+
+# Structural Equivalence
+
+Use distance to show how different or similar each row, or node, is from every other row. Similar nodes have low distance between them.
+
+```{r}
+euclid_dist <- dist(x = friends_task_social_std, method = "euclidean")
+euclid_dist
+```
+
+## Visualize the distances
+
+```{r}
+fit <- cmdscale(d = euclid_dist, k = 2)
+fit
+```
+
+```{r}
+x <- fit[, 1]
+y <- fit[, 2]
+```
+
+```{r}
+plot(x, y,
+  xlab = "Coordinate 1", ylab = "Coordinate 2",
+  main = "2 Dim MDS solution", type = "n"
+)
+text(x, y, labels = 1:length(x), cex = 1)
+```
+
+# Defining Positions
+
+Different from finding groups or communities. In this case, it is based on patterns of ties to other nodes.
+
+Many different approaches possible. This example uses `hclust()`.
+
+```{r}
+hc <- hclust(euclid_dist)
+plot(hc)
+```
+
+Eg., the maximum distance between 10, 15, 1 and 12 is a bit below 8.
+
+To cut the tree at an arbitrary height.
+
+```{r}
+plot(hc)
+plot_clusters <- rect.hclust(hc, h = 12)
+```
+
+```{r}
+plot(hc)
+rect.hclust(hc, h = 8)
+```
+
+> Extract membership at height 12
+
+```{r}
+hc_ids <- cutree(hc, h = 12)
+hc_ids
+```
+
+## Determine optimal number
+
+```{r}
+library(NbClust)
+```
+
+```{r}
+clusters <- NbClust(
+  data = friends_task_social_std,
+  distance = "euclidean",
+  method = "complete",
+  index = c("ch")
+)
+clusters
+```
+
+Different approaches utilize different heuristics and may yield slightly different results. ?kmeans ?pamk ?Mclust. In general, it is a good idea to compare the results across different approaches, including using different criterion to judge model fit. 
+
+# Role Analysis
+
+Create a reduced version where positions betcome the nodes.
+
+## Permuting by Position
+
+The idea is to take the matrix of friendship, social or task ties and create a plot where the values are colored by whether a tie exists between i and j. The key is reordering the rows/columns of the matrix to correspond to the positions from the clustering analysis. In this way, nodes in the same position will be clumped together in the figure. This makes it possible to see how nodes in different positions relate to one another; moving us closer to capturing roles in the classroom.
+
+```{r}
+id_dat <- data.frame(
+  ids = class182_attributes$ids,
+  position = hc_ids
+)
+id_dat <- id_dat[order(id_dat$position), ]
+id_dat
+```
+
+```{r}
+social_mat_rearrange <- social_mat[id_dat$ids, id_dat$ids]
+```
+
+```{r}
+library(RColorBrewer)
+
+column_cols <- c("red", "green", "black", "blue")
+
+heatmap(social_mat_rearrange,
+  Rowv = NA, Colv = NA, revC = T,
+  col = colorRampPalette(brewer.pal(6, "Blues"))(25),
+  ColSideColors = column_cols[id_dat$position],
+  RowSideColors = column_cols[id_dat$position],
+  symm = T
+)
+```
+
+Substantively, we can see that most social interactions happen within positions. For example, actors in position 1 (red) tend to socially interact with others in position 1. There is, however, a fair amount of social interaction between actors in position 1 (red) and position 4 (blue), as well as between actors in position 2 (green) and position 4 (blue). There is also some social interaction between those in position 1 (red) and position 3 (black), although the rates are much lower than with interactions happening within positions.
+
+## Constructing a Blockmodel
+
+In the blockmodel, the positions are the nodes.
+
+```{r}
+#| message: false
+library(sna)
+```
+
+```{r}
+blockmod_friend <- blockmodel(friend_mat, ec = hc_ids)
+blockmod_friend
+```
+
+Block 4 shows NaN because it is a single node.
+
+```{r}
+blockmod_task <- blockmodel(task_mat, ec = hc_ids)
+blockmod_social <- blockmodel(social_mat, ec = hc_ids)
+```
+
+```{r}
+blockmod_task
+```
+
+```{r}
+blockmod_social
+```
+
+## Plotting a Blockmodel
+
+It will also be useful for the plot to have a simpler, uniform weighting scheme across the relations. We will create a weighting scheme based on the following logic: where the edge weight is equal to 0 if the value is less then the mean weight; equal to 1 if it is greater than the mean but less than 1 standard deviation above the mean; and equal to 2 if the value is greater than 1 standard deviation above the mean. 
+
+```{r}
+make_block_model_edgelist <-
+  function(block_model, relation_label, directed = T) {
+    block_mat <- block_model$block.model
+    block_mat[is.na(block_mat)] <- 0
+    net_block <- network(block_mat,
+      loops = T,
+      directed = directed
+    )
+    edges_netblock <- as.edgelist(net_block)
+    weight_edge <- c(block_mat[edges_netblock])
+    block_edgelist <- data.frame(edges_netblock,
+      weight = weight_edge,
+      Tie = relation_label
+    )
+    edge_mean <- mean(block_mat)
+    edge_sd <- sd(block_mat)
+    edge_max <- max(block_mat)
+    block_edgelist$WeightRecode <-
+      cut(block_edgelist$weight,
+        breaks = c(0, edge_mean, edge_mean + edge_sd, edge_max),
+        include.lowest = T, right = F, labels = c("0", "1", "2")
+      )
+    block_edgelist$WeightRecode <-
+      as.numeric(as.character(block_edgelist$WeightRecode))
+
+    colnames(block_edgelist)[1:2] <- c("sender", "receiver")
+    block_edgelist
+  }
+```
+
+```{r}
+blockedges_friend <- make_block_model_edgelist(
+  block_model = blockmod_friend,
+  relation_label = "friendship",
+  directed = T
+)
+blockedges_friend
+```
+
+```{r}
+blockedges_task <- make_block_model_edgelist(
+  block_model = blockmod_task,
+  relation_label = "task",
+  directed = F
+)
+
+blockedges_social <- make_block_model_edgelist(
+  block_model = blockmod_social,
+  relation_label = "social",
+  directed = F
+)
+```
+
+```{r}
+block_dat <- rbind(blockedges_friend, blockedges_task, blockedges_social)
+```
+
+Include only weights above the mean for simplicity
+
+```{r}
+block_dat <- block_dat[block_dat$WeightRecode %in% c("1", "2"), ]
+block_dat
+```
+
+`igraph` is preferred for plots with multiple types of edges.
+
+```{r}
+blockmod_igraph <- as.matrix(block_dat[, c("sender", "receiver")]) |>
+  graph_from_edgelist(directed = T)
+```
+
+```{r}
+E(blockmod_igraph)$type <- block_dat[, "Tie"]
+```
+
+```{r}
+#| message: false
+library(car)
+
+cols <- recode(
+  block_dat[, "Tie"],
+  "'friendship' = 'red'; 'task' = 'blue'; 'social' = 'green'"
+)
+
+E(blockmod_igraph)$color <- cols
+```
+
+```{r}
+E(blockmod_igraph)$width <- block_dat[, "WeightRecode"]
+```
+
+```{r}
+plot(blockmod_igraph, margins = 0.2)
+```
+
+There should not be arrows social and task because they are undirected.
+
+```{r}
+friend_edge <- E(blockmod_igraph)$type == "friendship"
+self_loop <- which_loop(blockmod_igraph)
+
+arrow_mode <- ifelse(friend_edge & !self_loop, yes = ">", no = "-")
+arrow_mode
+```
+
+Set angles for loops
+
+```{r}
+edge_loop_angles <- rep(0, nrow(block_dat))
+edge_loop_angles[self_loop & friend_edge] <- 4 * pi / 3
+```
+
+```{r}
+social_edge <- E(blockmod_igraph)$type == "social"
+edge_loop_angles[self_loop & social_edge] <- 3 * pi / 3
+```
+
+```{r}
+plot(blockmod_igraph,
+  edge.arrow.mode = arrow_mode,
+  edge.arrow.size = 0.65, edge.arrow.width = 0.75,
+  vertex.label = c("block 1", "block 2", "block3", "block4"),
+  vertex.label.dist = 4.5, vertex.label.degree = 0,
+  edge.loop.angle = edge_loop_angles, margin = 0.2
+)
+
+legend("left", c("friendship", "task", "social"),
+  col = c("red", "blue", "green"),
+  lwd = 1, cex = 0.8
+)
+```
+
+## Interpretation
+
+```{r}
+rowSums(blockmod_task$block.model, na.rm = T)
+```
+
+Block 4, with heavy task interactions and no friendship interactions is likely the teacher.
+
+Block 3 socializes with itself and sends unreciprocated friendship ties to Block 1. It interacts little with the teacher.
+
+```{r}
+round(blockmod_task$block.model[, 4], 3)
+```
+
+We can think of this as a low integration, lower status role in the classroom.
+
+Block 1 is a high engagement block with an asymmetric relationship with Block 3.
+Block 2 is similar, without the Block 3 relationship, suggesting less social desirability.
+
+Overall there is little interaction between groups, only through the teacher.
+
+```{r}
+table(class182_attributes$gender[hc_ids == 1])
+table(class182_attributes$race[hc_ids == 1])
+```
+
+Group 1 is very diverse.
+
+```{r}
+table(class182_attributes$gender[hc_ids == 2])
+table(class182_attributes$race[hc_ids == 2])
+```
+
+Group 2 is all women, but racially diverse.
+
+```{r}
+table(class182_attributes$gender[hc_ids == 3])
+table(class182_attributes$race[hc_ids == 3])
+```
+
+Group 3 is all white, but mixed gender.
+
+# Local Equivalence
+
+Local equivalence clusers actors if the have the same interactional behaviour in their local neighborhoods (not who but how).
+
+We will keep our analysis simple and focus on a single relation, here using the task network to walk through the analysis. The first step is to calculate the individual triad census. As of the writing of this tutorial, there is no package in R that will calculate the individual triad census. There is, however, a stand alone script made available by Hummel and Sodeur that provides the same results. We begin by reading in their function:
+
+```{r}
+source("f.rc.r")
+```
+
+```{r}
+task_mat_binary <- task_mat
+task_mat_binary[task_mat_binary > 0] <- 1
+```
+
+```{r}
+task_triads_ego <- f.rc(task_mat_binary)
+dim(task_triads_ego)
+```
+
+The columns
+
+
+    1 Ego, A1, A2
+    2 Ego->A1, A2
+    3 Ego->A1, Ego->A2
+    4 Ego<-A1
+    5 Ego<-A1, Ego<-A2
+    6 Ego<->A1
+    7 Ego<->A1, Ego<->A2
+    8 Ego<-A1, Ego->A2
+    9 Ego<->A1, Ego->A2
+    10 Ego<->A1, Ego<-A2
+    11 A1<->A2
+    12 Ego->A1, A1<->A2
+    13 Ego->A1, Ego->A2, A1<->A2
+    14 Ego<-A1, A1<->A2
+    15 Ego<-A1, Ego<-A2, A1<->A2
+    16 Ego<->A1, A1<->A2
+    17 Ego<->A1, Ego<->A2, A1<->A2
+    18 Ego<-A1, Ego->A2, A1<->A2
+    19 Ego<->A1, Ego->A2, A1<->A2
+    20 Ego<->A1, Ego<-A2, A1<->A2
+    21 A1->A2 (or A1<-A2)
+    22 Ego->A1, A1->A2
+    23 Ego->A1, Ego->A2, A1->A2 (or A1<-A2 )
+    24 Ego<-A1, A1->A2
+    25 Ego<-A1, Ego<-A2, A1->A2 (or A1<-A2 )
+    26 Ego<->A1, A1->A2
+    27 Ego<->A1, Ego<->A2, A1->A2 (or A1<-A2 )
+    28 Ego<-A1, Ego->A2, A1->A2
+    29 Ego<->A1, Ego->A2, A1->A2
+    30 Ego<->A1, Ego<-A2, A1->A2
+    31 Ego->A1, A1<-A2
+    32 Ego<-A1, A1<-A2
+    33 Ego<->A1, A1<-A2
+    34 Ego<-A1, Ego->A2, A1<-A2
+    35 Ego<->A1, Ego->A2, A1<-A2
+    36 Ego<->A1, Ego<-A2, A1<-A2
+
+
+```{r}
+task_triads_ego[1:10, 1:10]
+```
+
+We will now use the triad census matrix to see which nodes have similar patterns of task interactions. Here, we will employ concor (convergence of iterated correlations), an algorithm that clusters nodes into positions based on the correlations between rows. Nodes with similar rows (i.e., triad counts) will be placed together. Note that we could have used concor above, in the original analysis, just as we could use hierarchical clustering in this analysis. 
+
+```{r}
+source("concor_functions.R")
+source("clustConfigurations_concor.R")
+```
+
+```{r}
+concor_results <- t(task_triads_ego) |>
+  concor(depth = 6)
+concor_results
+```
+
+Solutions are less aggregated moving from left to right.
+
+Now, we need to figure out how many clusters best describes the underlying data. To do this, we will examine how each solution (or columns from concor_results) fits the data. The function to plot the fit statistics is clustConfigurations_concor(). The basic idea is to examine the within- and between-cluster correlations for each solution. We first take the observed correlation matrix, and calculate the mean correlations by cluster (mean value within the cluster and mean values to other clusters). We then take this matrix of means and correlate it with the observed correlation matrix to see how well the solution approximates the true data. Higher values suggest better fits.
+
+```{r}
+observed_correlation <- cor(t(task_triads_ego))
+diag(observed_correlation) <- NA
+```
+
+```{r}
+concor_fit <- clustConfigurations_concor(
+  concor_results,
+  observed_correlation
+)
+```
+
+```{r}
+positions_triads <- concor_results[, 4]
+positions_triads
+```
+
+What types of triads are associated with the positions? We will create a summary matrix, where the cells correspond to the average number of times that actors in a position are in a given triad type. The matrix is m x n, where m is the number of positions and n is the 36 possible triad types. 
+
+```{r}
+position_triad_mat <- aggregate(task_triads_ego,
+  by = list(cluser = positions_triads),
+  FUN = mean
+)
+position_triad_mat[, c(1, 2, 7, 8, 17, 18)]
+```
+
+We can see, for example, that position 5 (node 16, the teacher), is constituted by having a high number of type 7 triads (Ego<->A1, Ego<->A2) and type 17 triads (Ego<->A1, Ego<->A2, A1<->A2). They have 0 type 16 triads (Ego<->A1, A1<->A2). This means that the 'teacher' position does tasks with both alters in a given triad. We are unlikely to find a case where the teacher does tasks with one student (A1) who does tasks with another student (A2) but the teacher ignores the second student. The teacher can, however, do tasks with two students who do not do tasks with each other (Ego<->A1, Ego<->A2). Compare this to the triads for position 4 (node 4) who is almost never in triad 17 (Ego<->A1, Ego<->A2, A1<->A2), and is much more likely to be in triad 1 (the null triad). This is suggestive of a position that does not engage heavily in task interactions.
+
+Position 2, on the other hand, is constituted by a higher number of type 6 triads (Ego<->A1) and fewer null triads (type 1) than position 4. Thus, students in this position are more involved in task interactions than those in position 4. Position 2 is also very different than position 5 (the teacher), most clearly in the lower number of type 7 triads (Ego<->A1, Ego<->A2). Those in position 2 are unlikely to do task interactions with A1 and A2, when A1 and A2 are not tied together. Thus, we do not see students playing the ego role in Ego<->A1, Ego<->A2, as this kind of interaction is reserved for the teacher. All of this points to a system where task interactions are centered around the teacher (who connects unconnected students), with some students more engaged than others.

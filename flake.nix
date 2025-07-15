@@ -41,6 +41,7 @@
               intergraph
               reshape
               sna
+              NbClust
               ergm
               egor
               car
@@ -62,6 +63,7 @@
               R6
               GGally
               dbplyr
+              RColorBrewer
               RPostgres
               Rcpp
               sessioninfo
