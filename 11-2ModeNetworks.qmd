@@ -1,0 +1,803 @@
+---
+title: "Two-mode Networks: Affilitations and Dualities"
+format: 
+  html:
+    toc: true
+    keep-md: true
+  gfm: default
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+options(digits = 5)
+```
+
+The data consist of students (anonymized) and the student clubs in which they are members (e.g., National Honor Society, wrestling team, cheerleading squad, etc.). The data thus allow us to capture the duality of social life in the school, as students are linked by being in the same clubs, and clubs are linked by sharing the same students.
+
+Substantively, we are motivated by the following questions:
+
+    a) Which student clubs serve to integrate the school and which are more peripheral? 
+    b) Which student clubs tend to share members at high rates? 
+    c) What is the shared feature, or theme, that brings these clubs together in a cluster?
+
+# Setup
+
+```{r}
+#| message: false
+library(igraph)
+```
+
+```{r}
+url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/affiliations_1996.txt"
+
+affiliations96 <- read.delim(file = url1, check.names = FALSE)
+dim(affiliations96)
+```
+
+```{r}
+affiliations96[1:8, 1:8]
+```
+
+```{r}
+affils_student1 <- affiliations96[1, ]
+affils_student1[which(affils_student1 == 1)]
+```
+
+```{r}
+url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/attributes_students.txt"
+
+attributes_students <- read.delim(file = url2, stringsAsFactors = FALSE)
+
+url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/attributes_clubs.txt"
+
+attributes_clubs <- read.delim(file = url3, stringsAsFactors = FALSE)
+```
+
+The student data frame only includes students (1295 rows) and includes student specific attributes. The student specific attributes are:
+
+    gender (male, female)
+    grade96 (grade in 1996)
+    grade97 (grade in 1997)
+    race (Asian, black, Hispanic, Native American, white)
+    
+```{r}
+attributes_students[1:5, ]
+```
+
+The club data frame only includes clubs (91 rows) and includes club specific attributes.The main club attributes of interest are:
+
+    club_type_detailed (Academic Interest, Academic Competition, Ethnic Interest, Individual Sports, Leadership, Media, Performance Art, Service, Team Sports)
+    club_profile (how much attention does the club get? low, moderate, high, very high)
+    club_feeder (does club feed another club, like 8th grade football to 9th grade football?)
+    club_type_gender (is club mixed gender, just boys or just girls?)
+    club_type_grade (which grades, if any, is club restricted to?).
+
+
+```{r}
+attributes_clubs[1:5, ]
+```
+
+Note that the student attribute data frame must be sorted in the same order as the rows of the affiliation matrix, while the club attribute data frame must be sorted in the same order as the columns of the affiliation matrix. 
+
+```{r}
+shared_var_names <- c("ids", "type", "missing96", "missing97")
+
+shared <- rbind(
+  attributes_students[, shared_var_names],
+  attributes_clubs[, shared_var_names]
+)
+```
+
+```{r}
+num_clubs <- nrow(attributes_clubs)
+NA_dat_club <- rep(NA, num_clubs)
+
+student_var_names <- c("race", "gender", "grade96", "grade97")
+
+student_specific <- rbind(
+  attributes_students[, student_var_names],
+  data.frame(
+    race = NA_dat_club,
+    gender = NA_dat_club,
+    grade96 = NA_dat_club,
+    grade97 = NA_dat_club
+  )
+)
+```
+
+```{r}
+num_students <- nrow(attributes_students)
+NA_dat_student <- rep(NA, num_students)
+
+club_var_names <- c(
+  "club_type_detailed", "club_profile",
+  "club_feeder", "club_type_gender",
+  "club_type_grade"
+)
+
+club_specific <- rbind(
+  data.frame(
+    club_type_detailed = NA_dat_student,
+    club_profile = NA_dat_student,
+    club_feeder = NA_dat_student,
+    club_type_gender = NA_dat_student,
+    club_type_grade = NA_dat_student
+  ),
+  attributes_clubs[, club_var_names]
+)
+```
+
+```{r}
+attributes_students_clubs <- cbind(shared, student_specific, club_specific)
+head(attributes_students_clubs)
+```
+
+Keep only those in school in 1996.
+
+```{r}
+not_missing <- attributes_students_clubs$missing96 == 0
+
+is_student <- attributes_students_clubs$type == "student"
+not_missing_student <- not_missing[is_student]
+
+is_club <- attributes_students_clubs$type == "club"
+not_missing_club <- not_missing[is_club]
+
+affiliations96_nomiss <- affiliations96[not_missing_student, not_missing_club]
+
+attributes_nomiss <- attributes_students_clubs[not_missing, ]
+```
+
+```{r}
+affil_net96 <- graph_from_biadjacency_matrix(
+  incidence = affiliations96_nomiss,
+  mode = "all"
+)
+
+affil_net96
+```
+
+Note that the two-mode, or bipartite, network has a vertex attribute called type that indicates the kind of node. type is automatically created by igraph and attached as a vertex attribute. A False corresponds to the students (rows) and True corresponds to the clubs (columns). We thus have a network of students and clubs where all ties link students to clubs (based on membership). 
+
+```{r}
+type96 <- vertex_attr(affil_net96, "type")
+table(type96)
+```
+
+There are 938 students and 91 clubs.
+
+```{r}
+set_attributes <- function(net, data = attributes_nomiss, attribute) {
+  set_vertex_attr(
+    graph = net, name = attribute,
+    value = data[, attribute]
+  )
+}
+
+affil_net96 <- affil_net96 |>
+  set_attributes(attribute = "race") |>
+  set_attributes(attribute = "gender") |>
+  set_attributes(attribute = "grade96") |>
+  set_attributes(attribute = "club_type_detailed") |>
+  set_attributes(attribute = "club_profile")
+
+affil_net96
+```
+
+# Plotting the Network
+
+```{r}
+V(affil_net96)$color[type96 == FALSE] <- rgb(1, 0, 0, 0.5)
+V(affil_net96)$color[type96 == TRUE] <- rgb(0, 1, 0, 0.5)
+```
+
+```{r}
+V(affil_net96)$label <- V(affil_net96)$name
+V(affil_net96)$label.color <- rgb(0, 0, .2, .5)
+V(affil_net96)$label.cex <- .5
+V(affil_net96)$size <- 6
+V(affil_net96)$frame.color <- V(affil_net96)$color # set color around nodes
+
+E(affil_net96)$color <- rgb(.5, .5, 0, .2)
+```
+
+```{r}
+layout <- layout_with_fr(affil_net96, grid = "nogrid")
+```
+
+```{r}
+pdf("magact_stdnt_actvts_1996.pdf")
+plot(affil_net96, layout = layout)
+dev.off()
+```
+
+```{r}
+plot(affil_net96, layout = layout)
+```
+
+Remove the isolates
+```{r}
+degree0 <- which(degree(affil_net96) == 0)
+affil_net96_noisolates <- delete_vertices(affil_net96, degree0)
+```
+
+```{r}
+type96_noisolates <- vertex_attr(affil_net96_noisolates, "type")
+table(type96_noisolates)
+```
+
+```{r}
+is_student_type <- type96_noisolates == FALSE
+```
+
+```{r}
+V(affil_net96_noisolates)$label[is_student_type] <- NA
+V(affil_net96_noisolates)$color[is_student_type] <- rgb(1, 0, 0, .1)
+V(affil_net96_noisolates)$size[is_student_type] <- 2
+E(affil_net96_noisolates)$color <- rgb(.5, .5, 0, .05)
+```
+
+```{r}
+pdf("magact_stdnt_actvts_1996_layout_with_kk.pdf")
+plot(affil_net96_noisolates, layout = layout_with_kk)
+dev.off()
+```
+
+```{r}
+plot(affil_net96_noisolates, layout = layout_with_kk)
+```
+
+```{r}
+pdf("magact_stdnt_actvts_1996_layout_with_fr.pdf")
+plot(affil_net96_noisolates, layout = layout_with_fr)
+dev.off()
+```
+
+```{r}
+plot(affil_net96_noisolates, layout = layout_with_fr)
+```
+
+Coloring students by race lol
+
+```{r}
+#| message: false
+library(car)
+
+race <- V(affil_net96_noisolates)$race[is_student_type]
+
+student_node_color <-
+  recode(
+    race,
+    "'white' = 'red';
+         'Hispanic' = 'grey';
+         'Asian' = 'blue';
+         'black' = 'yellow';
+         'Native American' = 'black'"
+  )
+```
+```{r}
+V(affil_net96_noisolates)$color[is_student_type] <- student_node_color
+V(affil_net96_noisolates)$frame.color[is_student_type] <- student_node_color
+V(affil_net96_noisolates)$label[!is_student_type] <- NA
+```
+
+```{r}
+plot(affil_net96_noisolates)
+```
+
+# Single Mode Networks
+
+Divide the two-mode network into one-mode networks for analysis. The student-to-student network will have ties based on number or common clubs, and for the club-to-club network, ties will be based on number of common members.
+
+## Constructing one-mode projections
+
+
+> Manually
+
+To get the one-mode representation of ties between rows (students in our example), multiply the matrix by its transpose. To get the one-mode representation of ties between columns (clubs in our example), multiply the transpose of the matrix by the matrix. 
+
+```{r}
+affiliations96_nomiss_mat <- as.matrix(affiliations96_nomiss)
+club_club96 <- t(affiliations96_nomiss_mat) %*% affiliations96_nomiss_mat
+club_club96[1:5, 1:5]
+```
+
+```{r}
+student_student96 <- affiliations96_nomiss_mat %*% t(affiliations96_nomiss_mat)
+student_student96[1:5, 1:5]
+```
+
+```{r}
+dim(club_club96)
+dim(student_student96)
+```
+
+> with `bipartite_projection()`
+
+```{r}
+onemode96 <- bipartite_projection(affil_net96)
+club_net96 <- onemode96$proj2
+```
+
+The weight for the club-to-club network is based on the number of shared members between i and j. This is stored as an edge attribute called weight.
+
+```{r}
+club_names <- V(club_net96)$name
+mat <- as_adjacency_matrix(club_net96, attr = "weight", sparse = F)
+mat[1:5, 1:5]
+```
+
+The same as before, except the diagonals are zero.
+
+## Plotting one-mode projections
+
+```{r}
+V(club_net96)$label.color <- rgb(0, 0, .2, .8)
+V(club_net96)$label.cex <- .60
+V(club_net96)$size <- 6
+V(club_net96)$color <- rgb(0, 0, 1, .3)
+V(club_net96)$frame.color <- V(club_net96)$color
+```
+
+```{r}
+edgealpha <- log1p(E(club_net96)$weight) / max(log1p(E(club_net96)$weight) * 2)
+E(club_net96)$color <- rgb(.25, .75, 0, edgealpha)
+```
+
+```{r}
+pdf("magact_stdnt_actvts_1996_clubs.pdf")
+plot(club_net96, main = "layout_with_lgl", layout = layout_with_lgl)
+plot(club_net96, main = "layout_with_fr", layout = layout_with_fr)
+dev.off()
+```
+
+```{r}
+plot(club_net96, main = "layout_with_lgl", layout = layout_with_lgl)
+```
+
+```{r}
+library(svglite)
+
+svglite("magact_stdnt_actvts_1996_clubs_lgl.svg")
+plot(club_net96, main = "layout_with_lgl", layout = layout_with_lgl)
+svglite("magact_stdnt_actvts_1996_clubs_fr.svg")
+plot(club_net96, main = "layout_with_fr", layout = layout_with_fr)
+dev.off()
+```
+
+To reduce density, weight the edges to remove edges below the mean, and assign weights to the others based on standard deviation, with .5 if between 0 and 1 sds, 1.5 if between 1 and 2, and 2.5 if above 2.
+
+```{r}
+std_weight <- sd(E(club_net96)$weight)
+weight_mean_center <- (E(club_net96)$weight - mean(E(club_net96)$weight))
+
+recode_weight <- E(club_net96)$weight
+recode_weight[weight_mean_center <= 0] <- -1
+recode_weight[(weight_mean_center > 0) &
+  (weight_mean_center <= std_weight)] <- 0.5
+recode_weight[(weight_mean_center > std_weight) &
+  (weight_mean_center <= std_weight * 2)] <- 1.5
+recode_weight[weight_mean_center > std_weight * 2] <- 2.5
+```
+
+```{r}
+E(club_net96)$color <- rgb(.5, .5, 0, .2)
+E(club_net96)$width <- recode_weight
+V(club_net96)$size <- 3
+```
+
+```{r}
+plot(club_net96, layout = layout_with_lgl)
+```
+
+The plot offers important insight into the structure of club membership in the school. We can see that there are a number of grade-specific sports teams on the periphery and a core consisting of more generalist clubs, like Pep Club and National Honor Society (NHS). Now, we want to take the basic intuition from our plot and analyze the network more formally. We will consider key measures of centrality.
+
+# Club-to-club network
+
+```{r}
+weights <- E(club_net96)$weight
+scaled_weights <- weights / sd(weights)
+invscaled_weights <- 1 / scaled_weights
+```
+
+## Centrality
+
+```{r}
+deg_normalweights <- strength(club_net96, mode = "all")
+deg_scaledweights <- strength(club_net96,
+  mode = "all",
+  weights = scaled_weights
+)
+deg_data <- data.frame(deg_normalweights, deg_scaledweights)
+deg_data[1:10, ]
+```
+
+Note that if we use the degree() function (as we did in other tutorials), this would not use the weights at all, just using a binarized version of the network (where ij = 0 if they have at least one member in common).
+
+```{r}
+deg_noweight <- degree(club_net96, mode = "all")
+cor(deg_scaledweights, deg_noweight)
+```
+
+This is similar but not the same.
+
+For closeness, we will use the inverted version of the weights, as two clubs with more common members are actually closer. But in calculating distance (the first step in calculating closeness), igraph treats the weights in the opposite manner, assuming that higher weights imply higher distances between nodes. We thus adjust for that and use the inverted weights. 
+
+```{r}
+close_invweights <- closeness(club_net96, weights = invscaled_weights)
+close_weights <- closeness(club_net96, weights = scaled_weights)
+```
+
+quick check, showing why inverted weights are used.
+
+```{r}
+cor(deg_normalweights, close_invweights)
+cor(deg_normalweights, close_weights)
+```
+
+```{r}
+deg_top10 <- order(deg_scaledweights, decreasing = T)[1:10]
+toptenclubs_degree <- club_names[deg_top10]
+data.frame(high_degree = toptenclubs_degree)
+```
+
+```{r}
+deg_bottom10 <- order(deg_scaledweights, decreasing = F)[1:10]
+bottomtenclubs_degree <- club_names[deg_bottom10]
+data.frame(
+  high_degree = toptenclubs_degree,
+  low_degree = bottomtenclubs_degree
+)
+```
+
+Which club attributes are associated with network centrality? Are higher status clubs more/less central to the network?
+
+```{r}
+club_profile <- factor(V(club_net96)$club_profile,
+  ordered = T,
+  levels = c("low", "moderate", "high", "very_high")
+)
+
+centrality_data <- data.frame(deg_data, club_profile = club_profile)
+head(centrality_data)
+```
+
+```{r}
+aggregate(deg_scaledweights ~ club_profile, data = centrality_data, FUN = mean)
+aggregate(deg_scaledweights ~ club_profile, data = centrality_data, FUN = sd)
+```
+
+Low profile clubs are more central, but are also much more diverse in degree.
+
+## Groups
+
+Which clubs tend to share members?
+
+```{r}
+groups_scaledweights <- cluster_fast_greedy(club_net96,
+  weights = scaled_weights
+)
+```
+
+What clubs are in each group?
+
+```{r}
+group_dat <- data.frame(
+  group = as.numeric(membership(groups_scaledweights)),
+  name = V(club_net96)$name,
+  club_type_detailed = V(club_net96)$club_type_detailed
+)
+head(group_dat)
+```
+
+```{r}
+group_dat[group_dat[, "group"] == 1, ]
+```
+
+```{r}
+table(group_dat$club_type_detailed[group_dat$group == 1])
+prop.table(table(group_dat$club_type_detailed[group_dat$group == 1]))
+```
+
+Group 1 is mainly sports teams.
+
+```{r}
+group_dat[group_dat[, "group"] == 2, ]
+table(group_dat$club_type_detailed[group_dat$group == 2])
+prop.table(table(group_dat$club_type_detailed[group_dat$group == 2]))
+```
+
+Most are academic or art related.
+
+```{r}
+group_dat[group_dat[, "group"] == 3, ]
+table(group_dat$club_type_detailed[group_dat$group == 3])
+prop.table(table(group_dat$club_type_detailed[group_dat$group == 3]))
+```
+
+```{r}
+group_dat[group_dat[, "group"] == 4, ]
+table(group_dat$club_type_detailed[group_dat$group == 4])
+prop.table(table(group_dat$club_type_detailed[group_dat$group == 4]))
+```
+
+A heterogenous group with Ports teams, Performance Arts, and Service clubs.
+
+```{r}
+group_dat[group_dat[, "group"] == 5, ]
+table(group_dat$club_type_detailed[group_dat$group == 5])
+prop.table(table(group_dat$club_type_detailed[group_dat$group == 5]))
+```
+
+A small group centered around sports teams (for younger students).
+
+```{r}
+V(club_net96)$color <- membership(groups_scaledweights)
+V(club_net96)$frame.color[deg_top10] <- rgb(1, 0, .2, .75)
+```
+
+```{r}
+set.seed(105)
+group_label <- group_dat$group
+plot(club_net96,
+  main = "Coloring by Groupw",
+  vertex.label = group_label, vertex.label.cex = .75
+)
+```
+
+# Using the tnet package
+
+So far, analysis has focused on mubers of edges, not weights on edges (strength of the connection).
+
+```{r}
+#| message: false
+library(tnet)
+```
+
+`tnet` takes a weighted edgelist, with the last column containing the weights.
+
+```{r}
+club_edgelist96 <- as_edgelist(club_net96, names = F)
+club_edgelist96 <- cbind(club_edgelist96, scaled_weights)
+colnames(club_edgelist96) <- c("sender", "receiver", "weights")
+```
+
+`tnet` wants directed networks, so we need a reverse edge for every edge.
+
+```{r}
+club_edgelist96 <- rbind(club_edgelist96, club_edgelist96[, c(2, 1, 3)])
+head(club_edgelist96)
+dim(club_edgelist96)
+```
+
+Calculated weighted centrality
+
+    measure = type of measure: degree calculates measure ignoring the weights; alpha considers the weights
+    alpha = weight to put on counts compared to edge weights. 0 = all weight on counts; 1 = all weight on edge weights
+
+```{r}
+degree_alpha1 <- degree_w(
+  net = club_edgelist96, measure = "alpha",
+  type = "out", alpha = 1
+)
+head(degree_alpha1)
+```
+
+```{r}
+degree_alpha0 <- degree_w(
+  net = club_edgelist96, measure = "alpha",
+  type = "out", alpha = 0
+)
+head(degree_alpha0)
+```
+
+```{r}
+degree_alpha.5 <- degree_w(
+  net = club_edgelist96, measure = "alpha",
+  type = "out", alpha = .5
+)
+head(degree_alpha.5)
+```
+
+```{r}
+cor(degree_alpha1[, 2], degree_alpha.5[, 2])
+cor(degree_alpha0[, 2], degree_alpha.5[, 2])
+```
+
+```{r}
+close_alpha1 <- closeness_w(club_edgelist96, alpha = 1)
+head(close_alpha1)
+```
+
+closeness and scaled closeness. Unlike `igraph`, do not need to invert the weights.
+
+```{r}
+close_alpha0 <- closeness_w(club_edgelist96, alpha = 0)
+head(close_alpha0)
+```
+
+This is equivalent to
+
+```{r}
+close_igraph_noweight <- closeness(club_net96, weights = NA)
+head(close_igraph_noweight)
+```
+
+```{r}
+close_alpha.5 <- closeness_w(club_edgelist96, alpha = .5)
+cor(close_alpha0[, 2], close_alpha.5[, 2])
+```
+
+# Racial Segregation
+
+How strong is homophily along racial lines?
+
+How many weighted edges connecting students are homophilous? If two students are in the same club, do they share race. Calculate over co-membership edges, and determine the proportion of edges matching on race.
+
+How many times is a student in a club with at least one other student of the same race? Do students ever join clubs where they cannot find a student of the same race?
+
+## Proportion of co-membership edges matching on race
+
+```{r}
+student_net96 <- onemode96$proj1
+```
+```{r}
+student_edges <-
+  as_edgelist(student_net96) |>
+  data.frame(weight = E(student_net96)$weight)
+colnames(student_edges)[1:2] <- c("sender", "receiver")
+head(student_edges)
+```
+
+```{r}
+race_dat <- data.frame(
+  name = V(student_net96)$name,
+  race = V(student_net96)$race
+)
+head(race_dat)
+```
+
+```{r}
+sender_race <- race_dat[match(
+  student_edges[, "sender"],
+  race_dat[, "name"]
+), "race"]
+receiver_race <- race_dat[match(
+  student_edges[, "receiver"],
+  race_dat[, "name"]
+), "race"]
+student_edges <- data.frame(
+  student_edges,
+  sender_race,
+  receiver_race
+)
+head(student_edges)
+```
+
+```{r}
+same_race <- student_edges[, "sender_race"] == student_edges[, "receiver_race"]
+```
+
+```{r}
+sum(student_edges[same_race == T, "weight"]) / sum(student_edges[, "weight"])
+```
+
+Many co-membership ties exist across race.
+
+> Do the match at least one other student?
+
+```{r}
+club_student_edges <- as_edgelist(affil_net96, names = F)
+colnames(club_student_edges)[1:2] <- c("sender", "receiver")
+head(club_student_edges)
+```
+
+```{r}
+race2 <- V(affil_net96)$race
+```
+
+```{r}
+match_race <- NA
+
+for (i in 1:nrow(club_student_edges)) {
+  # grabbing race of student in edge:
+  send_race <- race2[club_student_edges[i, "sender"]]
+
+  # getting race of students in club of interest, excluding student in edge:
+  club_id <- club_student_edges[i, "receiver"]
+  edges_to_club <- club_student_edges[-i, "receiver"] == club_id
+  student_ids <- club_student_edges[-i, ][edges_to_club, "sender"]
+  club_race_composition <- race2[student_ids]
+
+  # asking if race of focal student race matches any other student in club:
+  match_race[i] <- send_race %in% club_race_composition
+}
+```
+
+```{r}
+head(match_race)
+```
+
+```{r}
+prop.table(table(match_race))
+```
+
+It is very rare that only one of a racial group is in any club.
+
+# Club centrality and attributes
+
+Are more central clubs more or less segregated in terms of student attributes like grade, gender or race. Is the proportion higher in central, bridging clubs or in peripheral, exclusive ones?
+
+Calculate the proportion of student pairs within each club that have the same gender or grade.
+
+```{r}
+student_id_list <- apply(affiliations96_nomiss,
+  MARGIN = 2,
+  FUN = \(x) which(x == 1)
+)
+
+student_id_list[1:2]
+```
+
+```{r}
+prop_same <- function(attribute, ids) {
+  tab_attribute <- table(attribute[ids])
+  num_students <- sum(tab_attribute)
+  num_match <- sum(tab_attribute^2) - num_students
+  prop_same <- num_match / (num_students * (num_students - 1))
+}
+```
+
+```{r}
+gender <- V(affil_net96)$gender[V(affil_net96)$type == FALSE]
+
+same_gender_prop <- lapply(student_id_list,
+  FUN = prop_same,
+  attribute = gender
+)
+```
+
+```{r}
+same_gender_prop <- unlist(same_gender_prop)
+head(same_gender_prop)
+```
+
+Correlate centrality scores with same-gender proportions.
+
+```{r}
+cor(deg_normalweights, same_gender_prop)
+```
+
+> and for grade
+
+```{r}
+grade <- V(affil_net96)$grade96[V(affil_net96)$type == FALSE]
+
+same_grade_prop <-
+  lapply(student_id_list,
+    FUN = prop_same,
+    attribute = grade
+  ) |>
+  unlist()
+
+cor(deg_normalweights, same_grade_prop)
+```
+
+Central clubs do have higher levels of segregation regarding gender and grade.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

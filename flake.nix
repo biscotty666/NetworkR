@@ -31,47 +31,50 @@
             texlive.combined.scheme-full
             rstudio
             radianWrapper
+            inkscape
             (with rPackages; [
-              quarto
-              languageserver
-              httpgd
-              lintr
-              igraph
-              network
-              intergraph
-              reshape
-              sna
-              NbClust
-              ergm
-              egor
-              car
-              networkDynamic
-              tsna
-              pagedown
-              e1071
-              tidyverse
-              ggfortify
-              ggnetwork
-              networkD3
-              ndtv
-              janitor
-              gt
-              gtsummary
-              lobstr
-              memoise
-              png
-              R6
               GGally
-              dbplyr
+              NbClust
+              R6
               RColorBrewer
               RPostgres
+              RSQLite
               Rcpp
+              bookdown
+              car
+              dbplyr
+              e1071
+              egor
+              ergm
+              ggfortify
+              ggnetwork
+              gt
+              gtsummary
+              httpgd
+              igraph
+              intergraph
+              janitor
+              languageserver
+              lintr
+              lobstr
+              memoise
+              ndtv
+              network
+              networkD3
+              networkDynamic
+              pagedown
+              png
+              quarto
+              reshape
               sessioninfo
               sloop
+              sna
+              svglite
               testthat
+              tidyverse
+              tnet
+              tsna
               zeallot
-              RSQLite
-              bookdown
             ])
           ];
           shellHook = ''
