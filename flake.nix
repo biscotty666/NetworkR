@@ -34,12 +34,14 @@
             inkscape
             (with rPackages; [
               GGally
+              NLP
               NbClust
               R6
               RColorBrewer
               RPostgres
               RSQLite
               Rcpp
+              SnowballC
               bookdown
               car
               dbplyr
@@ -55,6 +57,7 @@
               intergraph
               janitor
               languageserver
+              ldatuning
               lintr
               lobstr
               memoise
@@ -72,7 +75,9 @@
               svglite
               testthat
               tidyverse
+              tm
               tnet
+              topicmodels
               tsna
               zeallot
             ])

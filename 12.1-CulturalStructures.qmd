@@ -1,0 +1,348 @@
+---
+title: "Cultural Structures"
+format: 
+  html:
+    toc: true
+    keep-md: true
+  gfm: default
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+options(digits = 5)
+```
+
+For our empirical case, we analyze textual data based on a set of sociology abstracts (drawn from recent dissertations). We are interested in discovering the latent topics that exist in the data, where each topic is defined by having a distinct pattern of words associated with it. We are also interested in seeing which abstracts get placed together and why. In this way we are trying to uncover the underlying structure of the field of sociology (as represented in abstracts), where certain words and researchers are associated with a topic and certain topics are closer to each other than others. We thus see the intuition of a network approach played out using textual data. 
+
+# Preparation
+
+```{r}
+library(NLP)
+library(tm)
+library(SnowballC)
+library(topicmodels)
+library(ldatuning)
+```
+
+A subset of the data
+
+```{r}
+url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/sociologysample.csv"
+
+abstracts <- read.csv(file = url1, stringsAsFactors = FALSE)
+str(abstracts)
+```
+
+```{r}
+abstracts[1, "text"]
+```
+
+Transform the raw text data into Corpuses.
+
+```{r}
+abstracts_corp <- tm::Corpus(tm::VectorSource(abstracts$text))
+length(abstracts_corp)
+```
+
+One per abstract.
+
+> Make everything lower case
+
+```{r}
+abstracts_corp <- tm_map(abstracts_corp, tolower)
+```
+
+```{r}
+abstracts_corp[[1]]$content
+```
+
+> Some words are combined with "_".
+
+```{r}
+split_words_us <- function(x, pattern) gsub(pattern, replacement = " ", x)
+split_words <- content_transformer(split_words_us)
+abstracts_corp <- tm_map(abstracts_corp, split_words, pattern = "_")
+abstracts_corp <- tm_map(abstracts_corp, split_words, pattern = "/")
+```
+
+```{r}
+abstracts_corp[[1]]$content
+```
+
+> Remove punctuation
+
+```{r}
+abstracts_corp <- tm_map(abstracts_corp, removePunctuation)
+```
+
+> Remove numbers
+
+```{r}
+abstracts_corp <- tm_map(abstracts_corp, removeNumbers)
+```
+
+> Remove commonly used grammatical words
+
+```{r}
+stopwords("english")
+```
+
+```{r}
+abstracts_corp <- tm_map(abstracts_corp, removeWords, stopwords("english"))
+```
+
+Now, let's add a few more words to our stopword list. Again, we want to remove words that are not differentiating for the corpus at hand (here abstracts from sociology dissertations). We will add the following words that were not in the default stop list.
+
+```{r}
+myStopwords <- c(
+  "dissertation", "chapter", "chapters", "research",
+  "researcher", "researchers", "study", "studies",
+  "studied", "studys", "studying", "one", "two", "three"
+)
+abstracts_corp <- tm_map(abstracts_corp, removeWords, myStopwords)
+```
+
+> Remove whitespace
+
+```{r}
+abstracts_corp <- tm_map(abstracts_corp, stripWhitespace)
+```
+
+> Reduce to stem-words
+
+```{r}
+abstracts_corp <- tm_map(abstracts_corp, stemDocument)
+```
+
+```{r}
+abstracts_corp[[1]]$content
+```
+
+> full pipeline
+
+```{r}
+#| warning: false
+
+split_words_us <- function(x, pattern) gsub(pattern, replacement = " ", x)
+split_words <- content_transformer(split_words_us)
+myStopwords <- c(
+  "dissertation", "chapter", "chapters", "research",
+  "researcher", "researchers", "study", "studies",
+  "studied", "studys", "studying", "one", "two", "three"
+)
+abstracts_corp <- Corpus(VectorSource(abstracts$text)) |>
+  tm_map(tolower) |>
+  tm_map(split_words, pattern = "_") |>
+  tm_map(split_words, pattern = "/") |>
+  tm_map(removePunctuation) |>
+  tm_map(removeNumbers) |>
+  tm_map(removeWords, stopwords("english")) |>
+  tm_map(removeWords, myStopwords) |>
+  tm_map(stripWhitespace) |>
+  tm_map(stemDocument)
+```
+
+```{r}
+abstracts_corp[[1]]$content
+```
+
+> Create a document-term matrix
+
+The document-term matrix captures how many times each document used a particular term.
+
+```{r}
+abstracts_dtm <- DocumentTermMatrix(abstracts_corp)
+abstracts_dtm
+```
+
+Thus, about 98% of the possible 'ties' between documents and terms do not actually exist (835074 / (20228 + 835074)), suggesting that many words are not used widely across abstracts. 
+
+```{r}
+inspect(abstracts_dtm[1, ])
+```
+
+```{r}
+inspect(abstracts_dtm[, "risk"])
+```
+
+```{r}
+head(Terms(abstracts_dtm))
+```
+
+```{r}
+mat_abstract_words <- as.matrix(abstracts_dtm)
+dim(mat_abstract_words)
+mat_abstract_words[1:5, 1:5]
+```
+
+> Calculate summary measures
+
+```{r}
+sum(mat_abstract_words[1, ] > 0)
+```
+
+# Topic Modeling
+
+We will utilize LDA, latent Dirichlet allocation. LDA attempts to uncover the underlying, or latent, topics in the corpus of interest. Different (latent) topics create different word use and we can use the co-occurrence of words in a document to uncover which words hang together under a given topic. A topic will have a high probability of yielding a set of words when those words are used together at high rates. In a similar way, we can ask which abstracts are likely to fall into which topic, based on their distribution of word choice. 
+
+## Initial Model
+
+Inputs to the algorithm:
+
+```{r}
+burnin <- 200 # omit iterations at beginning
+iter <- 3000 # iterations
+thin <- 2000 # omit iterations between kept iterations
+seed <- list(2003, 5, 63, 100001, 765)
+nstart <- 5 # number of repeated random starts
+best <- TRUE # only continue model on best model
+k <- 5 # Number of groups (clusters)
+```
+
+```{r}
+ldaOut <- LDA(
+  x = abstracts_dtm, k = k,
+  method = "Gibbs",
+  control = list(
+    nstart = nstart, seed = seed, best = best,
+    burnin = burnin, iter = iter, thin = thin
+  )
+)
+ldaOut_topics <- topics(ldaOut)
+head(ldaOut_topics)
+```
+
+```{r}
+topicProbabilities <- ldaOut@gamma
+head(topicProbabilities)
+```
+
+The most likely words associated with each latent topic:
+
+```{r}
+ldaOut_terms <- terms(ldaOut, 10)
+ldaOut_terms
+```
+
+## Picking th number of topics
+
+```{r}
+fitmodel <- FindTopicsNumber(
+  dtm = abstracts_dtm,
+  topics = seq(4, 40, 2),
+  metrics = c("CaoJuan2009", "Arun2010"),
+  method = "Gibbs",
+  control = list(
+    nstart = 1, seed = c(30),
+    best = best, burnin = burnin,
+    iter = iter, thin = thin
+  ),
+  mc.cores = 4, verbose = TRUE
+)
+fitmodel
+```
+
+```{r}
+#| warning: false
+
+FindTopicsNumber_plot(fitmodel)
+```
+
+```{r}
+k <- 30
+
+ldaOut2 <- LDA(
+  x = abstracts_dtm, k = k,
+  method = "Gibbs",
+  control = list(
+    nstart = nstart, seed = seed, best = best,
+    burnin = burnin, iter = iter, thin = thin
+  )
+)
+ldaOut_terms2 <- terms(ldaOut2, 10)
+```
+
+```{r}
+ldaOut_terms2[, c(2, 14, 20, 23, 24)]
+```
+
+Most topics seem coherent, some are more general like Topic 24. 
+
+# Network Representation
+
+```{r}
+#| message: false
+library(igraph)
+```
+
+```{r}
+mat_abstract_words[1:5, 1:5]
+```
+
+In this case, let’s focus on just a subset of the full matrix. We will look at the network of abstracts and words associated with topic 20 ("family") and topic 23 ("gender"). 
+
+```{r}
+ldaOut_topics2 <- topics(ldaOut2)
+```
+
+```{r}
+in_20_23 <- ldaOut_topics2 %in% c(20, 23)
+mat_abstract_words_subset <- mat_abstract_words[in_20_23, ]
+worduse <- colSums(mat_abstract_words_subset)
+mat_abstract_words_subset <- mat_abstract_words_subset[, worduse > 5]
+dim(mat_abstract_words_subset)
+```
+
+We will construct a two-mode network, where there are two types of nodes (abstracts and words) and abstracts are connected to words (and vice versa) but there are no direct ties between nodes of the same type. 
+
+```{r}
+abstract_word_net <-
+  graph_from_biadjacency_matrix(mat_abstract_words_subset,
+    mode = "all", weighted = T
+  )
+```
+
+```{r}
+type <- vertex_attr(abstract_word_net, "type")
+table(type)
+```
+
+24 abstracts and 159 words.
+
+```{r}
+V(abstract_word_net)$color[type == TRUE] <- rgb(0, 1, 0, .2)
+```
+
+```{r}
+in20 <- names(which(ldaOut_topics2 == 20))
+in23 <- names(which(ldaOut_topics2 == 23))
+```
+
+```{r}
+which_topic20 <- V(abstract_word_net)$name %in% in20
+V(abstract_word_net)$color[which_topic20] <- rgb(0, 0, 1, .2)
+which_topic23 <- V(abstract_word_net)$name %in% in23
+V(abstract_word_net)$color[which_topic23] <- rgb(1, 0, 0, .2)
+```
+
+```{r}
+V(abstract_word_net)$label <- V(abstract_word_net)$name
+V(abstract_word_net)$label.color <- rgb(0, 0, .2, .85)
+V(abstract_word_net)$label.cex <- .75
+V(abstract_word_net)$size <- 3
+V(abstract_word_net)$frame.color <- V(abstract_word_net)$color
+E(abstract_word_net)$color <- rgb(.5, .5, .5, .04)
+```
+
+```{r}
+set.seed(106)
+svglite::svglite("images/abstract_word_net.svg")
+plot(abstract_word_net, layout = layout_with_fr)
+dev.off()
+```
+
+
+
+
+
