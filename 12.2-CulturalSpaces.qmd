@@ -1,0 +1,275 @@
+---
+title: "Cultural Spaces"
+format: 
+  html:
+    toc: true
+    keep-md: true
+  gfm: default
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+options(digits = 5)
+```
+
+# Correspondence Analysis
+
+```{r}
+#| message: false
+library(FactoMineR)
+library(factoextra)
+library(CAinterprTools)
+library(gplots)
+library(plot3D)
+library(NbClust)
+```
+
+```{r}
+url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/department_topic_data.txt"
+
+department_topic <- read.table(file = url1, header = T)
+department_topic[1:4, 1:4]
+```
+
+The rows correspond to the department of the student (with the prefix corresponding to department type: SBS is social behavioral sciences; H is humanities; Ed is the education school; B is business; HS is health sciences). The columns correspond to the main topic of the dissertation. The values are the number of people in that department and topic. So 742 students submitted a dissertation on the life course and were in a sociology department.
+
+```{r}
+dim(department_topic)
+```
+
+25 Departments, 33 Topics
+
+```{r}
+department_names <- rownames(department_topic)
+topic_names <- colnames(department_topic)
+```
+
+> Correspondence Analysis
+
+Places the rows and columns in the same space.
+
+```{r}
+ca_mod1 <- CA(department_topic, graph = FALSE)
+ca_mod1
+```
+
+```{r}
+summary(ca_mod1, nb.dec = 2, nbelements = 5, ncp = 3)
+```
+
+
+```{r}
+fviz_ca_biplot(ca_mod1)
+```
+
+```{r}
+fviz_ca_biplot(ca_mod1,
+  col.row = "orange", col.col = "steelblue",
+  labelsize = 3, repel = T
+) +
+  theme_minimal()
+```
+
+```{r}
+fviz_ca_row(ca_mod1, col.row = "orange", labelsize = 3, repel = T) +
+  theme_minimal()
+```
+
+# Number of Dimensions
+
+Decide on number of dimensions, balancing fit and interpretablity.
+
+```{r}
+eig <- get_eigenvalue(ca_mod1)
+eig
+```
+
+> Scree plot
+
+```{r}
+fviz_screeplot(ca_mod1)
+```
+
+> Average rule
+
+Another potentially useful approach is to apply the average rule heuristic, which chooses the number of dimensions by selecting all dimensions that explain more than the average dimension. 
+
+```{r}
+aver.rule(department_topic)
+```
+
+The dashed line indicates the average variance explained and the bars show the percent variance explained for each dimension. The average rule would suggest a solution of 6 dimensions. But if we take a closer look we can see that dimensions 5 and 6 only add around 5% to the explained variance, a fairly low return on adding an entire dimension to the plot. So, we may think that the average rule tends to yield solutions with too many dimensions, at least in this case.
+
+> Malinvaud's test
+
+This sequential test checks the significance of the remaining dimensions once the first k ones have been selected. 
+
+```{r}
+malinvaud(department_topic)
+```
+
+This shows 18 dimensions as significant.
+
+The text suggests that the scree plot recommends 2 or 3 dimensions, and pursues this avenue.
+
+> Examine the third dimension
+
+Make a plot of the departments
+
+```{r}
+locs_department <- ca_mod1$row$coord
+```
+
+```{r}
+text3D(
+  x = locs_department[, "Dim 1"],
+  y = locs_department[, "Dim 2"],
+  z = locs_department[, "Dim 3"],
+  labels = department_names, col = "black", theta = 120, phi = 20,
+  xlab = "dim1", ylab = "dim2", zlab = "dim3", axes = T,
+  ticktype = "detailed", main = "Departments in 3 Dimensions",
+  cex = 0.75, bty = "g", d = 2, adj = 1, font = 1
+)
+```
+
+```{r}
+#| echo: false
+svglite::svglite("images/departments_3d.svg")
+text3D(
+  x = locs_department[, "Dim 1"],
+  y = locs_department[, "Dim 2"],
+  z = locs_department[, "Dim 3"],
+  labels = department_names, col = "black", theta = 120, phi = 20,
+  xlab = "dim1", ylab = "dim2", zlab = "dim3", axes = T,
+  ticktype = "detailed", main = "Departments in 3 Dimensions",
+  cex = 0.75, bty = "g", d = 2, adj = 1, font = 1
+)
+dev.off()
+```
+
+The plot is somewhat hard to read in three dimensions, but if we look at the third (z) dimension, we can see that on one extreme we have higher education and administration and on the other end we have English and performing arts. Thus, dimension 3 basically separates some of the departments that are close together on dimension 2 (English and higher education) but unless we really think that distinction is crucial we may be able to get away with the simpler 2-d plot, especially as those departments are already pretty different on dimension 1.
+
+# Importance of Rows/Columns
+
+Which rows/columns are most importang in fitting a given dimension.
+
+```{r}
+fviz_contrib(ca_mod1, choice = "row", axes = 1) +
+  theme(axis.text.x = element_text(size = 8.0, angle = 75))
+```
+
+The highest contributing rows are far from the center of the dimension.
+
+The second dimension:
+
+```{r}
+fviz_contrib(ca_mod1, choice = "row", axes = 2) +
+  theme(axis.text.x = element_text(size = 8.0, angle = 75))
+```
+
+```{r}
+fviz_contrib(ca_mod1, choice = "col", axes = 1) +
+  theme(axis.text.x = element_text(size = 8.0, angle = 75))
+```
+
+```{r}
+fviz_contrib(ca_mod1, choice = "col", axes = 2) +
+  theme(axis.text.x = element_text(size = 8.0, angle = 75))
+```
+
+```{r}
+fviz_ca_biplot(ca_mod1,
+  col.row = "contrib", col.col = "contrib",
+  labelsize = 3, repel = T
+) +
+  scale_color_gradient2(
+    low = "white", mid = "steelblue",
+    high = "darkblue", midpoint = 8
+  ) +
+  theme_minimal()
+```
+
+Looking at our figure, it is worth thinking about what it means to be in the center of the plot compared to the extremes on one of the dimensions. For example, sociology (department) and gender_sexuality (topic) are in the center, while political science and social movements are not. This would suggest that sociology PhDs tend to take on dissertations that span many of the topics in the field. Similarly, this means that individuals from a wide variety of disciplines study gender. On the other hand, social movements is not studied by a wide variety of departments while those in political science tend not to study a large number of (sociological) topics, focused mainly on social movements. We thus have distinctions between central, generalist departments/topics and those that occupy more peripheral, niche locations
+
+# Hierarchical Clustering
+
+Calculate distance matrix between objects based on locations in 2D solution.
+
+```{r}
+locs_topic <- ca_mod1$col$coord
+locs <- rbind(locs_department, locs_topic)[, 1:2]
+```
+
+```{r}
+d <- dist(locs, method = "euclidean")
+fit <- hclust(d, method = "ward.D2")
+```
+
+Choose number of clusters with `NbClust`.
+
+```{r}
+clusters <- NbClust(
+  data = NULL, diss = d, distance = NULL,
+  method = "ward.D2", index = c("silhouette")
+)
+clusters$Best.nc
+```
+
+Clusters contain both topics and departments
+
+```{r}
+cluster_names <- paste("cluster", clusters$Best.partition, sep = "")
+names(cluster_names) <- names(clusters$Best.partition)
+row_clusters <- cluster_names[department_names]
+col_clusters <- cluster_names[topic_names]
+```
+
+```{r}
+fviz_ca_biplot(ca_mod1,
+  col.row = row_clusters, col.col = col_clusters,
+  labelsize = 3, repel = T
+) +
+  theme_minimal()
+```
+
+```{r}
+#| echo: false
+svglite::svglite("images/CA_biplot.svg")
+fviz_ca_biplot(ca_mod1,
+  col.row = row_clusters, col.col = col_clusters,
+  labelsize = 3, repel = T
+) +
+  theme_minimal()
+dev.off()
+```
+
+> Clustering rows and columns seperately
+
+```{r}
+ca_mod2 <- CA(department_topic, ncp = 2, graph = FALSE)
+clust_rows <- HCPC(
+  res = ca_mod2, nb.clust = 8, graph = FALSE,
+  cluster.CA = "rows"
+)
+clust_cols <- HCPC(
+  res = ca_mod2, nb.clust = 8, graph = FALSE,
+  cluster.CA = "columns"
+)
+```
+
+```{r}
+plot(clust_rows, choice = "map", draw.tree = FALSE)
+```
+
+```{r}
+row_clusters2 <- clust_rows$data[department_names, "clust"]
+table(row_clusters, row_clusters2)
+```
+
+rows and columns are the same, though not in the same order.
+
+```{r}
+plot(clust_cols, choice = "map", draw.tree = F)
+```
+

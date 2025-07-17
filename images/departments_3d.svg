@@ -1,0 +1,124 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' class='svglite' width='720.00pt' height='576.00pt' viewBox='0 0 720.00 576.00'>
+<defs>
+  <style type='text/css'><![CDATA[
+    .svglite line, .svglite polyline, .svglite polygon, .svglite path, .svglite rect, .svglite circle {
+      fill: none;
+      stroke: #000000;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-miterlimit: 10.00;
+    }
+    .svglite text {
+      white-space: pre;
+    }
+  ]]></style>
+</defs>
+<rect width='100%' height='100%' style='stroke: none; fill: #FFFFFF;'/>
+<defs>
+  <clipPath id='cpMC4wMHw3MjAuMDB8MC4wMHw1NzYuMDA='>
+    <rect x='0.00' y='0.00' width='720.00' height='576.00' />
+  </clipPath>
+</defs>
+<g clip-path='url(#cpMC4wMHw3MjAuMDB8MC4wMHw1NzYuMDA=)'>
+</g>
+<defs>
+  <clipPath id='cpNTkuMDR8Njg5Ljc2fDU5LjA0fDUwMi41Ng=='>
+    <rect x='59.04' y='59.04' width='630.72' height='443.52' />
+  </clipPath>
+</defs>
+<g clip-path='url(#cpNTkuMDR8Njg5Ljc2fDU5LjA0fDUwMi41Ng==)'>
+<line x1='347.12' y1='299.34' x2='342.97' y2='75.47' style='stroke-width: 0.75;' />
+<line x1='342.97' y1='75.47' x2='167.26' y2='115.68' style='stroke-width: 0.75;' />
+<line x1='167.26' y1='115.68' x2='193.57' y2='398.34' style='stroke-width: 0.75;' />
+<line x1='193.57' y1='398.34' x2='347.12' y2='299.34' style='stroke-width: 0.75;' />
+<line x1='347.12' y1='299.34' x2='560.87' y2='350.37' style='stroke-width: 0.75;' />
+<line x1='560.87' y1='350.37' x2='581.54' y2='95.90' style='stroke-width: 0.75;' />
+<line x1='581.54' y1='95.90' x2='342.97' y2='75.47' style='stroke-width: 0.75;' />
+<line x1='193.57' y1='398.34' x2='449.81' y2='486.13' style='stroke-width: 0.75;' />
+<line x1='449.81' y1='486.13' x2='560.87' y2='350.37' style='stroke-width: 0.75;' />
+</g>
+<g clip-path='url(#cpMC4wMHw3MjAuMDB8MC4wMHw1NzYuMDA=)'>
+<text transform='translate(551.17,435.59) rotate(-52)' text-anchor='middle' style='font-size: 12.00px; font-family: "Liberation Sans";' textLength='28.56px' lengthAdjust='spacingAndGlyphs'>dim1</text>
+<line x1='549.03' y1='364.85' x2='556.07' y2='373.77' style='stroke-width: 0.75;' />
+<text x='563.12' y='386.99' text-anchor='middle' style='font-size: 12.00px; font-family: "Liberation Sans";' textLength='20.81px' lengthAdjust='spacingAndGlyphs'>-0.5</text>
+<line x1='521.18' y1='398.90' x2='528.76' y2='408.59' style='stroke-width: 0.75;' />
+<text x='536.36' y='422.60' text-anchor='middle' style='font-size: 12.00px; font-family: "Liberation Sans";' textLength='16.94px' lengthAdjust='spacingAndGlyphs'>0.0</text>
+<line x1='488.34' y1='439.04' x2='496.55' y2='449.66' style='stroke-width: 0.75;' />
+<text x='504.79' y='464.60' text-anchor='middle' style='font-size: 12.00px; font-family: "Liberation Sans";' textLength='16.94px' lengthAdjust='spacingAndGlyphs'>0.5</text>
+<text transform='translate(310.02,494.25) rotate(19)' text-anchor='middle' style='font-size: 12.00px; font-family: "Liberation Sans";' textLength='28.56px' lengthAdjust='spacingAndGlyphs'>dim2</text>
+<line x1='248.63' y1='417.21' x2='243.45' y2='429.12' style='stroke-width: 0.75;' />
+<text x='238.21' y='445.45' text-anchor='middle' style='font-size: 12.00px; font-family: "Liberation Sans";' textLength='20.81px' lengthAdjust='spacingAndGlyphs'>-0.5</text>
+<line x1='329.37' y1='444.87' x2='324.32' y2='457.65' style='stroke-width: 0.75;' />
+<text x='319.21' y='474.85' text-anchor='middle' style='font-size: 12.00px; font-family: "Liberation Sans";' textLength='16.94px' lengthAdjust='spacingAndGlyphs'>0.0</text>
+<line x1='420.29' y1='476.02' x2='415.45' y2='489.79' style='stroke-width: 0.75;' />
+<text x='410.55' y='508.00' text-anchor='middle' style='font-size: 12.00px; font-family: "Liberation Sans";' textLength='16.94px' lengthAdjust='spacingAndGlyphs'>0.5</text>
+<text transform='translate(129.83,267.03) rotate(84)' text-anchor='middle' style='font-size: 12.00px; font-family: "Liberation Sans";' textLength='28.56px' lengthAdjust='spacingAndGlyphs'>dim3</text>
+<line x1='188.47' y1='343.64' x2='175.74' y2='345.10' style='stroke-width: 0.75;' />
+<text x='162.92' y='350.85' text-anchor='middle' style='font-size: 12.00px; font-family: "Liberation Sans";' textLength='20.81px' lengthAdjust='spacingAndGlyphs'>-0.5</text>
+<line x1='180.91' y1='262.36' x2='167.66' y2='263.56' style='stroke-width: 0.75;' />
+<text x='154.32' y='269.06' text-anchor='middle' style='font-size: 12.00px; font-family: "Liberation Sans";' textLength='16.94px' lengthAdjust='spacingAndGlyphs'>0.0</text>
+<line x1='172.75' y1='174.67' x2='158.95' y2='175.56' style='stroke-width: 0.75;' />
+<text x='145.03' y='180.75' text-anchor='middle' style='font-size: 12.00px; font-family: "Liberation Sans";' textLength='16.94px' lengthAdjust='spacingAndGlyphs'>0.5</text>
+</g>
+<g clip-path='url(#cpNTkuMDR8Njg5Ljc2fDU5LjA0fDUwMi41Ng==)'>
+<polygon points='347.12,299.34 167.26,115.68 460.17,153.41 560.87,350.37 ' style='stroke-width: 0.75; stroke: none;' />
+<line x1='449.81' y1='486.13' x2='460.17' y2='153.41' style='stroke-width: 0.75; stroke-dasharray: 1.00,3.00;' />
+<line x1='460.17' y1='153.41' x2='581.54' y2='95.90' style='stroke-width: 0.75; stroke-dasharray: 1.00,3.00;' />
+<line x1='167.26' y1='115.68' x2='460.17' y2='153.41' style='stroke-width: 0.75; stroke-dasharray: 1.00,3.00;' />
+</g>
+<g clip-path='url(#cpMC4wMHw3MjAuMDB8MC4wMHw1NzYuMDA=)'>
+<text x='374.40' y='34.66' text-anchor='middle' style='font-size: 14.40px; font-family: "Liberation Sans";' textLength='211.98px' lengthAdjust='spacingAndGlyphs'>Departments in 3 Dimensions</text>
+</g>
+<g clip-path='url(#cpNTkuMDR8Njg5Ljc2fDU5LjA0fDUwMi41Ng==)'>
+<polygon points='347.12,299.34 342.97,75.47 167.26,115.68 193.57,398.34 347.12,299.34 ' style='stroke-width: 0.75; stroke: none; fill: #ECECEC;' />
+<polyline points='347.12,299.34 342.97,75.47 167.26,115.68 193.57,398.34 347.12,299.34 ' style='stroke-width: 0.75; stroke: #BEBEBE;' />
+<polygon points='347.12,299.34 560.87,350.37 581.54,95.90 342.97,75.47 347.12,299.34 ' style='stroke-width: 0.75; stroke: none; fill: #ECECEC;' />
+<polyline points='347.12,299.34 560.87,350.37 581.54,95.90 342.97,75.47 347.12,299.34 ' style='stroke-width: 0.75; stroke: #BEBEBE;' />
+<polygon points='347.12,299.34 193.57,398.34 449.81,486.13 560.87,350.37 347.12,299.34 ' style='stroke-width: 0.75; stroke: none; fill: #ECECEC;' />
+<polyline points='347.12,299.34 193.57,398.34 449.81,486.13 560.87,350.37 347.12,299.34 ' style='stroke-width: 0.75; stroke: #BEBEBE;' />
+<line x1='324.02' y1='79.80' x2='330.12' y2='310.31' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='279.65' y1='89.96' x2='290.73' y2='335.70' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='227.70' y1='101.85' x2='245.36' y2='364.95' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='188.47' y1='343.64' x2='346.30' y2='254.97' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='180.91' y1='262.36' x2='345.10' y2='189.99' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='172.75' y1='174.67' x2='343.82' y2='121.10' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='564.92' y1='300.55' x2='346.30' y2='254.97' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='570.89' y1='227.04' x2='345.10' y2='189.99' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='577.28' y1='148.40' x2='343.82' y2='121.10' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='395.35' y1='79.95' x2='394.61' y2='310.68' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='471.03' y1='86.43' x2='462.66' y2='326.93' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='554.71' y1='93.60' x2='537.15' y2='344.71' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='549.03' y1='364.85' x2='330.12' y2='310.31' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='521.18' y1='398.90' x2='290.73' y2='335.70' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='488.34' y1='439.04' x2='245.36' y2='364.95' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='248.63' y1='417.21' x2='394.61' y2='310.68' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='329.37' y1='444.87' x2='462.66' y2='326.93' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<line x1='420.29' y1='476.02' x2='537.15' y2='344.71' style='stroke-width: 1.50; stroke: #FFFFFF;' />
+<text x='356.54' y='273.85' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='60.59px' lengthAdjust='spacingAndGlyphs'>Ed__Education</text>
+<text x='414.00' y='226.50' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='158.28px' lengthAdjust='spacingAndGlyphs'>Ed__Special_Education_and_Guidance</text>
+<text x='308.73' y='293.22' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='126.64px' lengthAdjust='spacingAndGlyphs'>Ed__Curriculum_Development</text>
+<text x='482.33' y='159.43' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='105.22px' lengthAdjust='spacingAndGlyphs'>SBS__Clinical_Psychology</text>
+<text x='336.79' y='337.28' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='113.39px' lengthAdjust='spacingAndGlyphs'>Ed__School_Administration</text>
+<text x='302.05' y='269.18' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='118.32px' lengthAdjust='spacingAndGlyphs'>Ed__Multicultural_Education</text>
+<text x='324.01' y='314.77' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='93.47px' lengthAdjust='spacingAndGlyphs'>Ed__Higher_Education</text>
+<text x='452.85' y='186.45' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='188.12px' lengthAdjust='spacingAndGlyphs'>SBS__Social_and_Developmental_Psychology</text>
+<text x='395.71' y='274.45' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='187.66px' lengthAdjust='spacingAndGlyphs'>Ed__Professional_and_Continuing_Education</text>
+<text x='505.39' y='210.03' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='53.46px' lengthAdjust='spacingAndGlyphs'>HS__Nursing</text>
+<text x='409.47' y='242.05' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='119.46px' lengthAdjust='spacingAndGlyphs'>Ed__Supplemental_Curricula</text>
+<text x='512.60' y='241.96' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='57.99px' lengthAdjust='spacingAndGlyphs'>HS__Medicine</text>
+<text x='515.44' y='241.24' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='77.04px' lengthAdjust='spacingAndGlyphs'>HS__Public_Health</text>
+<text x='380.60' y='223.75' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='165.76px' lengthAdjust='spacingAndGlyphs'>H__Languages__Societies_and_Cultures</text>
+<text x='425.54' y='249.86' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='64.09px' lengthAdjust='spacingAndGlyphs'>SBS__Sociology</text>
+<text x='355.62' y='210.26' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='206.09px' lengthAdjust='spacingAndGlyphs'>SBS__Communication_and_Information_Sciences</text>
+<text x='215.10' y='147.01' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='125.80px' lengthAdjust='spacingAndGlyphs'>H__Fine_and_Performing_Arts</text>
+<text x='186.25' y='117.76' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='91.02px' lengthAdjust='spacingAndGlyphs'>H__English_Literature</text>
+<text x='450.58' y='316.86' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='51.17px' lengthAdjust='spacingAndGlyphs'>B__Business</text>
+<text x='323.74' y='196.50' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='48.86px' lengthAdjust='spacingAndGlyphs'>H__Religion</text>
+<text x='334.09' y='233.97' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='81.89px' lengthAdjust='spacingAndGlyphs'>SBS__Anthropology</text>
+<text x='466.73' y='334.09' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='208.05px' lengthAdjust='spacingAndGlyphs'>SBS__Public_Affairs__Public_Policy__and_Planning</text>
+<text x='501.37' y='387.60' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='68.88px' lengthAdjust='spacingAndGlyphs'>SBS__Economics</text>
+<text x='309.33' y='266.20' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='44.96px' lengthAdjust='spacingAndGlyphs'>H__History</text>
+<text x='384.98' y='333.03' text-anchor='end' style='font-size: 9.00px; font-family: "Liberation Sans";' textLength='92.15px' lengthAdjust='spacingAndGlyphs'>SBS__Political_Science</text>
+</g>
+</svg>

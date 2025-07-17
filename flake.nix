@@ -33,6 +33,8 @@
             radianWrapper
             inkscape
             (with rPackages; [
+              CAinterprTools
+              FactoMineR
               GGally
               NLP
               NbClust
@@ -48,8 +50,10 @@
               e1071
               egor
               ergm
+              factoextra
               ggfortify
               ggnetwork
+              gplots
               gt
               gtsummary
               httpgd
@@ -66,6 +70,7 @@
               networkD3
               networkDynamic
               pagedown
+              plot3D
               png
               quarto
               reshape
