@@ -31,60 +31,62 @@
             texlive.combined.scheme-full
             rstudio
             radianWrapper
+            grass
             inkscape
             (with rPackages; [
-              CAinterprTools
-              FactoMineR
-              GGally
-              NLP
-              NbClust
-              R6
-              RColorBrewer
-              RPostgres
-              RSQLite
-              Rcpp
-              SnowballC
+              CAinterprTools #
+              FactoMineR #
+              GGally #
+              NLP #
+              NbClust #
+              RColorBrewer #
+              SnowballC #
               bookdown
-              car
-              dbplyr
-              e1071
-              egor
-              ergm
-              factoextra
+              car #
+              egor #
+              ergm #
+              factoextra #
+              geodata
               ggfortify
-              ggnetwork
-              gplots
+              ggnetwork #
+              gplots #
               gt
               gtsummary
               httpgd
-              igraph
-              intergraph
-              janitor
+              igraph #
+              intergraph #
+              janitor #
               languageserver
-              ldatuning
+              ldatuning #
+              link2GI
               lintr
-              lobstr
+              maptiles
               memoise
-              ndtv
-              network
-              networkD3
-              networkDynamic
+              nabor
+              ndtv #
+              network #
+              networkD3 #
+              networkDynamic #
+              osmdata
+              osmextract
               pagedown
-              plot3D
+              plot3D #
               png
-              quarto
-              reshape
-              sessioninfo
-              sloop
-              sna
-              svglite
-              testthat
-              tidyverse
-              tm
-              tnet
-              topicmodels
-              tsna
-              zeallot
+              quarto #
+              reshape #
+              rgrass
+              sf
+              sfnetworks
+              sna #
+              spData
+              stplanr
+              svglite #
+              tidygraph
+              tidyverse #
+              tm #
+              tmap
+              tnet #
+              topicmodels #
             ])
           ];
           shellHook = ''

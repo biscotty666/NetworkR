@@ -1,0 +1,414 @@
+---
+title: "13-Transportation"
+format: html
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+options(digits = 5)
+```
+
+
+```{r}
+#| message: false
+library(sf)
+library(dplyr)
+library(spDataLarge)
+library(stplanr) # for processing geographic transport data
+library(tmap) # map-making (see Chapter 9)
+library(ggplot2) # data visualization package
+library(sfnetworks) # spatial network classes and functions
+```
+
+There are many quantitative methods in transport planning, many of which fit into the classic ‘four stage’ transport model which involves the following steps (de Dios Ortuzar and Willumsen 2011): 
+
+    (1) trip generation to estimate trip freqency from origins; 
+    (2) distribution of trips to destinations; 
+    (3) modal split of trips between walking, cycling, buses etc.; 
+    (4) assignment of trips to the transport route network. 
+    
+To this we would like to add two more stages for the big data age: 
+
+    (0) data processing and exploration; and \
+    (5) validation. 
+
+
+```{r}
+data(package = "stplanr")$result[, "Item"]
+```
+
+```{r}
+od_eg <- read.csv(
+  text =
+    "origin, destination, V1, V2
+  1, 2, 100, 3
+  1, 3, 50, 5"
+)
+gt::gt(od_eg)
+```
+
+
+## Bristol
+
+In this chapter you will learn how to:
+
+    Describe the geographical patterns of transport behavior in cities
+    Identify key public transport nodes supporting multi-modal trips
+    Analyze travel ‘desire lines’ to find where many people drive short distances
+    Identify cycle route locations that will encourage less car driving and more cycling
+
+
+To get the wheels rolling on the practical aspects of this chapter, the next section begins by loading zonal data on travel patterns. These zone-level datasets are small but often vital for gaining a basic understanding of a settlement’s overall transport system.
+
+## Transport Zones
+
+The 102 zones used in this chapter are stored in bristol_zones, as illustrated in Figure 13.2. Note the zones get smaller in densely populated areas: each houses a similar number of people. bristol_zones contains no attribute data on transport, however, only the name and code of each zone:
+
+```{r}
+str(bristol_zones)
+str(bristol_od)
+```
+
+To combine the data frames, `bristol_od` must be aggregated.
+
+```{r}
+zones_attr <- bristol_od |>
+  group_by(o) |>
+  summarise(across(where(is.numeric), sum)) |>
+  dplyr::rename(geo_code = o)
+summary(zones_attr$geo_code %in% bristol_zones$geo_code)
+```
+
+
+```{r}
+zones_joined <- left_join(bristol_zones, zones_attr, by = "geo_code")
+sum(zones_joined$all)
+str(zones_joined)
+```
+
+```{r}
+zones_destinations <- bristol_od |>
+  group_by(d) |>
+  summarize(across(where(is.numeric), sum)) |>
+  select(geo_code = d, all_dest = all)
+zones_od <- inner_join(zones_joined, zones_destinations, by = "geo_code")
+```
+
+```{r}
+tm_shape(zones_od) +
+  tm_fill(c("all", "all_dest"),
+    fill.scale = tm_scale(values = viridis::plasma(4), breaks = c(0, 2000, 4000, 10000, 50000)),
+    fill.legend = tm_legend(title = "Trips", position = tm_pos_out("right", "center")),
+    fill.free = FALSE
+  ) +
+  tm_facets() +
+  tm_borders(col = "black", lwd = 0.5) +
+  tm_layout(panel.labels = c("Zone of origin", "Zone of destination"))
+```
+
+## Desire Lines
+
+```{r}
+od_top5 <- bristol_od |>
+  slice_max(all, n = 5)
+od_top5
+```
+
+```{r}
+bristol_od$active <- (bristol_od$bicycle + bristol_od$foot) /
+  bristol_od$all * 100
+od_intra <- filter(bristol_od, o == d)
+od_inter <- filter(bristol_od, o != d)
+```
+
+Convert the OD pairs to desire lines
+
+```{r}
+desire_lines <- od2line(od_inter, zones_od)
+```
+
+```{r}
+desire_lines_top5 <- od2line(od_top5, zones_od)
+tm_shape(desire_lines) +
+  tm_lines(
+    col = "active",
+    col.scale = tm_scale(values = viridis::plasma(5), breaks = c(0, 5, 10, 20, 40, 100)),
+    col.legend = tm_legend(title = "Active travel (%)"),
+    col_alpha = 0.6,
+    lwd = "all",
+    # lwd.scale = tm_scale(values.scale = 2),
+    lwd.legend = tm_legend(title = "Number of trips")
+  ) +
+  tm_shape(desire_lines_top5) +
+  tm_lines(lwd = 5, col = "black", col_alpha = 0.7) +
+  tm_scalebar()
+```
+
+The city center dominates transport patterns, with some significant peripheral nodes, suggesting that policy should be targeted in the center.
+
+## Nodes
+
+Nodes in geographic transport datasets are points among the predominantly linear features that comprise transport networks. Broadly are two main types of transport nodes:
+
+1. Nodes not directly on the network such as zone centroids or individual origins and destinations such as houses and workplaces
+2. Nodes that are a part of transport networks. Technically, a node can be located at any point on a transport network but in practice they are often special kinds of vertex such as intersections between pathways (junctions) and points for entering or exiting a transport network such as bus stops and train stations95
+
+ From an active travel perspective, public transport ‘legs’ of longer journeys divide trips into three:
+
+    The origin leg, typically from residential areas to public transport stations
+    The public transport leg, which typically goes from the station nearest a trip’s origin to the station nearest its destination
+    The destination leg, from the station of alighting to the destination
+
+
+```{r}
+desire_rail <- top_n(desire_lines, n = 3, wt = train)
+```
+
+Break up the trips between the three stages, based on location of railway stations.
+
+```{r}
+desire_rail <- line_via(desire_rail, bristol_stations)
+str(desire_rail)
+```
+
+```{r}
+zone_cents <- st_centroid(zones_od)
+zone_cents_rail <- zone_cents[desire_rail, ]
+bb <- tmaptools::bb(desire_rail, ext = 1.1)
+desire_rail_plot <- rbind(
+  st_sf(data.frame(Geometry = "Desire line (original)"), geometry = desire_rail$geometry),
+  st_sf(data.frame(Geometry = "Leg 1 (origin to station)"), geometry = desire_rail$leg_orig),
+  st_sf(data.frame(Geometry = "Leg 2 (station to station)"), geometry = desire_rail$leg_via),
+  st_sf(data.frame(Geometry = "Leg 3 (station to destination)"), geometry = desire_rail$leg_dest)
+)
+desire_rail_plot <- desire_rail_plot |>
+  mutate(lty = case_when(Geometry == "Desire line (original)" ~ 2, TRUE ~ 1)) |>
+  mutate(size = case_when(Geometry == "Desire line (original)" ~ 1, TRUE ~ 2))
+bristol_rail_points <- rbind(
+  st_sf(data.frame(
+    Node = "Origin and destination locations",
+    col = "black"
+  ), geometry = zone_cents_rail$geometry),
+  st_sf(data.frame(
+    Node = "Public transport node",
+    col = "red"
+  ), geometry = bristol_stations$geometry)
+)
+tm_shape(zones_od) +
+  tm_fill(fill_alpha = 0.2, lwd = 0.1) +
+  tm_shape(desire_rail_plot, bbox = bb, is.main = TRUE) +
+  tm_lines(
+    col = "Geometry",
+    col.scale = tm_scale(values = "brewer.set2"),
+    col.legend = tm_legend(position = tm_pos_in("left", "top")),
+    lwd = 2,
+    lty = "lty",
+    lty.scale = tm_scale_categorical(),
+    lty.legend = tm_legend_hide()
+  ) +
+  tm_shape(bristol_rail_points) +
+  tm_symbols(fill = "col", size = 0.75) +
+  tm_scalebar()
+```
+
+Destination legs are short, but origin to station lines suggest encouraging cycling to the station.
+
+## Routes
+
+Routing engines can generate outputs at three geographic levels of routes, legs and segments:
+
+    Route level outputs contain a *single feature* (typically a multilinestring and associated row in the data frame representation) per origin-destination pair, meaning a single row of data per trip
+    Leg level outputs contain a single feature and associated attributes *each mode* within each origin-destination (OD) pair, as described in Section 13.5. For trips only involving one mode (for example driving, from home to work, ignoring the short walk to the car), the leg is the same as the route: the car journey. For trips involving public transport, legs provide key information. The r5r function detailed_itineraries() returns legs which, confusingly, are sometimes referred to as ‘segments’
+    Segment-level outputs provide the most detailed information about routes, with records for each small section of the transport network. Typically segments are similar in length, or identical to, ways in OpenStreetMap. The cyclestreets function journey() returns data at the segment-level which can be aggregated by grouping by origin- and destination-level data returned by the route() function in stplanr
+
+Route-level results can be converted into segment-level results using the function stplanr::overline(). When working with segment- or leg-level data, route-level statistics can be returned by grouping by columns representing trip start and end points and summarizing/aggregating columns containing segment-level data.
+
+Cycling is most beneficial when it replaces car trips. Short trips (around 5 km, which can be cycled in 15 minutes at a speed of 20 km/hr) have a relatively high probability of being cycled, and the maximum distance increases when trips are made by electric bike (Lovelace et al. 2017). These considerations inform the following code chunk which filters the desire lines and returns the object desire_lines_short representing OD airs between which many (100+) short (2.5 to 5 km Euclidean distance) trips are driven:
+
+```{r}
+desire_lines$distance_km <- as.numeric(st_length(desire_lines)) / 1000
+desire_lines_short <- desire_lines |>
+  filter(car_driver >= 100, distance_km <= 5, distance_km >= 2.5)
+```
+
+Convert to routes.
+
+```{r}
+#| eval: false
+
+routes_short <- route(
+  l = desire_lines_short,
+  route_fun = route_osrm,
+  osrm.profile = "car"
+)
+routes_short |> saveRDS("data/routes_short.gpkg")
+```
+
+```{r}
+routes_short <- readRDS("data/routes_short.gpkg")
+class(routes_short)
+```
+
+```{r}
+routes_plot_data <- rbind(
+  desire_lines_short |> transmute(Entity = "Desire lines") |> sf::st_set_crs("EPSG:4326"),
+  routes_short |> transmute(Entity = "Routes") |> sf::st_set_crs("EPSG:4326")
+)
+zone_cents_routes <- zone_cents[desire_lines_short, ]
+tm_shape(zones_od) +
+  tm_fill(fill_alpha = 0.2, lwd = 0.1) +
+  tm_shape(desire_lines_short, is.main = TRUE) +
+  tm_lines(lty = 2) +
+  tm_shape(routes_short) +
+  tm_lines(col = "red") +
+  tm_add_legend(
+    title = "Entity", labels = c("Desire lines", "Routes"),
+    type = "lines", col = c("black", "red"), lty = c(2, 1),
+    position = tm_pos_in("left", "top")
+  ) +
+  tm_shape(zone_cents_routes) +
+  tm_symbols(fill = "black", size = 0.5) +
+  tm_scalebar()
+```
+
+# Route Networks
+
+Routes with legs and modes. Route networks can be inputs or outputs (design).
+
+Imagine a mode shift where 50% of car trips between 0 to 3 km in route distance are replaced by cycling, a percentage that drops by 10 percentage points for every additional kilometer of route distance so that 20% of car trips of 6 km are replaced by cycling and no car trips that are eight km or longer are replaced by cycling. 
+
+```{r}
+uptake <- function(x) {
+  case_when(
+    x <= 3 ~ 0.5,
+    x >= 8 ~ 0,
+    TRUE ~ (8 - x) / (8 - 3) * 0.5
+  )
+}
+
+routes_short_scenario <- routes_short |>
+  mutate(uptake = uptake(distance / 1000)) |>
+  mutate(
+    bicycle = bicycle + car_driver * uptake,
+    car_driver = car_driver * (1 - uptake)
+  )
+sum(routes_short_scenario$bicycle) - sum(routes_short$bicycle)
+```
+
+```{r}
+route_network_scenario <- overline(routes_short_scenario, attrib = "bicycle")
+```
+
+```{r rnetvis, out.width="49%", fig.show='hold', fig.cap="The percentage of car trips switching to cycling as a function of distance (left) and route network level results of this function (right).", echo=FALSE, fig.height=9.5}
+par(mfrow = c(1, 2))
+routes_short_scenario |>
+  ggplot() +
+  geom_line(aes(distance / 1000, uptake), color = "red", linewidth = 3) +
+  labs(x = "Route distance (km)", y = NULL, title = "Percent trips switching from driving to cycling") +
+  scale_y_continuous(labels = scales::percent)
+tm_shape(zones_od) +
+  tm_fill(fill_alpha = 0.2, lwd = 0.1) +
+  tm_shape(route_network_scenario, is.main = TRUE) +
+  tm_lines(
+    lwd = "bicycle",
+    lwd.scale = tm_scale(values.scale = 1.5),
+    lwd.legend = tm_legend(
+      title = "Number of bike trips per day\n(modeled, one direction)",
+      position = tm_pos_in("left", "top")
+    ),
+    col = "red"
+  )
+```
+
+# Convert to Graph
+
+```{r}
+summary(bristol_ways)
+```
+
+```{r}
+bristol_ways$lengths <- st_length(bristol_ways)
+ways_sfn <- as_sfnetwork(bristol_ways)
+class(ways_sfn)
+ways_sfn
+```
+
+> Centrality
+
+```{r}
+#| message: false
+library(tidygraph)
+ways_centrality <- ways_sfn |>
+  activate("edges") |>
+  mutate(betweenness = centrality_edge_betweenness(lengths))
+```
+
+```{r}
+bb_waysln <- tmaptools::bb(route_network_scenario,
+  xlim = c(0.1, 0.9),
+  ylim = c(0.1, 0.6),
+  relative = TRUE
+)
+tm_shape(zones_od) +
+  tm_fill(fill_alpha = 0.2, lwd = 0.1) +
+  tm_shape(ways_centrality |> st_as_sf(),
+    bb = bb_waysln, is.main = TRUE
+  ) +
+  tm_lines(
+    lwd = "betweenness",
+    lwd.scale = tm_scale(n = 2, values.scale = 2),
+    lwd.legend = tm_legend(title = "Betweenness"),
+    col = "#630032", col_alpha = 0.75
+  ) +
+  tm_shape(route_network_scenario) +
+  tm_lines(
+    lwd = "bicycle",
+    lwd.scale = tm_scale(n = 2, values.scale = 2),
+    lwd.legend = tm_legend(
+      title = "Number of bike trips (modeled, one direction)"
+    ),
+    col = "darkgreen", col_alpha = 0.75
+  ) +
+  tm_scalebar()
+```
+
+# Prioritizing new infrastructure
+
+Overlay areas of cycling potential with a dataset representing areas within a short distance of cycling infrastructure.
+
+```{r}
+existing_cycleways_buffer <- bristol_ways |>
+  filter(highway == "cycleway") |>
+  st_union() |>
+  st_buffer(dist = 100)
+```
+
+```{r}
+route_network_no_infra <- st_difference(
+  route_network_scenario |> st_set_crs(st_crs(existing_cycleways_buffer)),
+  existing_cycleways_buffer
+)
+route_network_no_infra
+```
+
+```{r}
+tmap_mode("view")
+qtm(route_network_no_infra,
+  basemaps = leaflet::providers$Esri.WorldTopoMap,
+  lwd = 5
+)
+```
+
+
+```{r}
+tmap_mode("plot")
+tm_shape(existing_cycleways_buffer, bbox = bristol_region) +
+  tm_polygons(fill = "lightgreen") +
+  tm_shape(route_network_scenario) +
+  tm_lines(
+    lwd = "bicycle",
+    lwd.scale = tm_scale(values.scale = 3),
+    lwd.legend = tm_legend(title = "Number of bike trips (modeled, one direction)"),
+    position = tm_pos_out("center", "bottom")
+  )
+```
