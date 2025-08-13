@@ -19,6 +19,13 @@
         inherit system;
         config.allowUnfree = true;
       };
+      myvscode = pkgs.vscode-with-extensions.override {
+        vscodeExtensions = (with pkgs.vscode-extensions; [
+          enkia.tokyo-night
+          sainnhe.gruvbox-material
+          vscodevim.vim
+          reditorsupport.r
+        ]);};
       in
       {
         devShells.default = pkgs.mkShell {
@@ -33,6 +40,7 @@
             radianWrapper
             grass
             inkscape
+            myvscode
             (with rPackages; [
               CAinterprTools #
               FactoMineR #
@@ -40,6 +48,7 @@
               NLP #
               NbClust #
               RColorBrewer #
+              Rglpk
               SnowballC #
               bookdown
               car #
@@ -81,12 +90,14 @@
               spData
               stplanr
               svglite #
+              tergm
               tidygraph
               tidyverse #
               tm #
               tmap
               tnet #
               topicmodels #
+              tsna
             ])
           ];
           shellHook = ''
