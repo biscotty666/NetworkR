@@ -1,0 +1,322 @@
+---
+title: "Longitudinal Network Models: STERGM"
+format: 
+  gfm:
+    toc: true
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+options(digits = 7)
+```
+
+Change in network over time.
+
+Four discrete networks representing interactions at 0-10 minutes, 10-20 minutes, etc.
+
+Substantively, our main question is how interaction partners in the classroom shift over a single class period. What mechanisms predict the adding of a tie that did not exist earlier in the class? What mechanisms predict the dropping of a tie? And are the mechanisms that predict the adding of a tie the same as dropping one? For example, students are likely to initiate conversations (i.e., add ties) with students who are sitting physically nearby. On the other hand, once two students are talking, sitting adjacent might not have a large effect on maintaining the tie over time; as they have already overcome the initial hurdle of being physically distant.
+
+# Preparation
+
+```{r}
+#| message: false
+
+library(sna)
+library(network)
+library(networkDynamic)
+```
+
+```{r}
+url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/talk_nets_undirected.RData"
+
+load(url(description = url1))
+```
+
+```{r}
+talk_time1
+```
+
+```{r}
+talk_time2
+```
+
+```{r}
+talk_time4
+```
+
+```{r}
+gender <- get.vertex.attribute(talk_time1, "gender")
+head(gender)
+```
+
+```{r}
+cols <- ifelse(gender == "male", "navy", "green")
+```
+
+We will also set the layout for the plot to be the same across the two periods. This makes it easier to see how edges are dropped/added from period to period. We accomplish this by defining the locations (locs) to place the nodes and then using the coord argument in the plot statement. We define the locations of the nodes based on the period 1 network.
+
+```{r}
+locs <- network.layout.fruchtermanreingold(talk_time1, layout.par = NULL)
+```
+
+```{r ttn-2}
+par(mfrow = c(1, 2))
+plot(talk_time1,
+  main = "Talk to Network, 0 to 10 minutes",
+  vertex.col = cols, coord = locs, vertex.cex = 2
+)
+plot(talk_time2,
+  main = "Talk to Network, 10 to 20 Minutes",
+  vertex.col = cols, coord = locs, vertex.cex = 2
+)
+```
+
+Note new edges formed, a group of all girls, otherwise gender mixing.
+
+```{r}
+net_dynamic_4periods <- networkDynamic(
+  network.list = list(talk_time1, talk_time2, talk_time3, talk_time4)
+)
+net_dynamic_4periods
+```
+
+```{r}
+net_dynamic_4periods_dat <- as.data.frame(net_dynamic_4periods)
+head(net_dynamic_4periods_dat)
+```
+
+onset is the period where the interaction begins, terminus where it ends.
+
+We will also add an edge covariate to the networkDynamic object. Here we will include the seating arrangement in the classroom, as we might expect that students who sit close together are more likely to talk to one another. 
+
+```{r}
+url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/discrete_talk_nets_seating.txt"
+
+seating_edgelist <- read.table(file = url2, header = T)
+head(seating_edgelist)
+```
+
+- Turn edgelist into directed network
+- Symmetrize to make undirected
+- attach to networkDynamic object
+
+```{r}
+library(magrittr)
+seating_matrix <- network(
+  x = seating_edgelist, directed = T,
+  vertices = data.frame(ids = 1:18)
+) %>%
+  symmetrize(rule = "weak")
+set.network.attribute(net_dynamic_4periods, "seating", seating_matrix)
+```
+
+- Formation model
+- Persistence model
+- dissolution model
+
+```{r}
+#| message: false
+library(tergm)
+library(tsna)
+```
+
+# Models
+
+## Model 1 - just edges
+
+The main function is tergm(). The key arguments are:
+
+    formula = formula specifying the formation and persistence/dissolution equation
+    estimate = type of estimation to use in fitting model
+    constraints = formula specifying any constraints to put on model
+    control = list of inputs to control estimation algorithm; set using control.tergm()
+    times = periods to include in estimating model
+
+The formation formula is set using `Form(~...)`. The persistence/dissolution formulas can be set using `Diss(~...)` or `Persist(~...)`. 
+
+For our first model, we will do something simple and only include a term for edges, capturing the base rate of tie formation/persistence. We set estimate to CMLE.
+
+```{r}
+stergm_mod1 <- tergm(
+  net_dynamic_4periods ~ Form(~edges) + Persist(~edges),
+  estimate = "CMLE", times = 0:3
+)
+summary(stergm_mod1)
+```
+
+Ties are formed at a lower rate than if the formations were random.
+
+To get a sense of what the results mean, we can look at the coefficient on edges for the tie persistence model. If we take the .4249, we can calculate the probability of an edge persisting from one period to the next:
+
+```{r}
+exp(.425) / (1 + exp(.425))
+```
+
+An edge existing in 1 period has a 60.5% probability of existing in the next period.
+
+The dissoultion model.
+
+```{r}
+summary(tergm(
+  net_dynamic_4periods ~ Form(~edges) + Diss(~edges),
+  estimate = "CMLE", times = 0:3
+))
+```
+
+## Model 2 - Edges, Homophily, Nodefactor
+
+The nodefactor terms capture basic differences in degree by the nodal attribute of interest (i.e., do girls talk more than boys in class?), while the nodematch terms capture if there is homophily on the attribute (do girls tend to talk to other girls in class?). 
+
+```{r}
+stergm_mod2 <- tergm(
+  net_dynamic_4periods ~
+    Form(~ edges + nodematch("gender") +
+      nodefactor("gender") +
+      nodematch("race") +
+      nodefactor("race")) +
+    Persist(~ edges + nodematch("gender") +
+      nodefactor("gender") +
+      nodematch("race") +
+      nodefactor("race")),
+  estimate = "CMLE", times = 0:3
+)
+summary(stergm_mod2)
+```
+
+Race and gender do not play much of a role, except in formation among whites.
+
+## Model 3 - Edges, Nodefactor, seating
+
+Here, we will include an edgecov term with the seating matrix as the input. 
+
+```{r}
+stergm_mod3 <- tergm(
+  net_dynamic_4periods ~
+    Form(~ edges +
+      nodefactor("race") +
+      edgecov("seating")) +
+    Persist(~ edges +
+      nodefactor("gender") +
+      edgecov("seating")),
+  estimate = "CMLE", times = 0:3
+)
+summary(stergm_mod3)
+```
+
+Proximity seems to affect tie formation but not persistence.
+
+## Model 4 - Adding GWESP
+
+For our last model, we will include a gwesp term, capturing if students form (and keep) edges when they share many common interaction partners.
+
+```{r}
+set.seed(107)
+
+stergm_mod4 <- tergm(
+  net_dynamic_4periods ~
+    Form(~ edges +
+      nodefactor("race") +
+      edgecov("seating") +
+      gwesp(decay = .5, fixed = T)) +
+    Persist(~ edges +
+      nodefactor("gender") +
+      edgecov("seating")),
+  estimate = "CMLE", times = 0:3,
+  control = control.tergm(
+    CMLE.ergm =
+      control.ergm(
+        MCMC.burnin = 50000,
+        MCMC.interval = 3000,
+        MCMC.samplesize = 65000
+      )
+  )
+)
+```
+
+
+```{r mcmc-lnm}
+options(digits = 4)
+mcmc.diagnostics(stergm_mod4, vars.per.page = 4)
+```
+
+```{r}
+summary(stergm_mod4)
+```
+
+The results suggest that students tend to form talking relationships when they have common interaction partners (looking at the positive, significant gwesp coefficient). So, if i and j talk with the same other students in Time T, they are likely to start talking with each other in T + 1.
+
+# Model fit
+
+One way of seeing if the model is fitting well is to simulate networks based on the underlying model and then compare the statistics in the simulated networks to that observed in the true networks (analogous to the gof() function in the ERGM case). Note that the simulations combine the formation and persistence processes and output the generated networks (based on both processes) at a given time slice. We will use a simulate() function. The main arguments are:
+
+- object = model of interest
+- nsim = number of separate replications; set to 1 in case of networkDynamic object
+- time.slices = number of distinct periods to run dynamic simulation over
+- nw.start = indicator for what network to start simulation at; nw.start=1 to begin with first observed network
+- monitor = formula indicating statistics to calculate on the simulated networks.
+
+For our simulation we will set time.slices to 1000, so we simulate change over 1000 different time periods. Of course our actual data only has 4 time periods, but since the model is about the general tendencies of tie formation and persistence, having a larger number of time periods simply adds more information about how the model is fitting (i.e., can it generate realistic networks over many periods that correspond to what we saw in the actual data?). We will start the simulations at the time 1 network. We set monitor to edges and triadcensus (there are four types as the network is undirected). Note that triadcensus was not a term in the model. We use set.seed() to ease reproducibility.
+
+```{r}
+set.seed(130)
+sim_mod4 <- simulate(stergm_mod4,
+  nsim = 1, time.slices = 1000,
+  nw.start = 1, monitor = ~ edges + triadcensus(c(0, 1, 2, 3))
+)
+```
+
+
+```{r}
+sim_stats <- attributes(sim_mod4)$stats
+head(sim_stats)
+```
+
+Calculate stats for observed network
+
+```{r}
+true_values <- tErgmStats(
+  nd = net_dynamic_4periods,
+  formula = "~ edges + triadcensus(c(0, 1, 2, 3))",
+  start = 0, end = 3
+)
+true_values
+```
+
+```{r}
+sim_values <- apply(sim_stats, 2, summary)
+rownames(sim_values) <- paste("sim", rownames(sim_values), sep = "_")
+sim_values
+```
+
+```{r}
+true_values_mean <- colMeans(true_values)
+rbind(sim_values, true_mean = true_values_mean)
+```
+
+Fitting well, except tc2.
+
+As another way of assessing fit, we can extract networks from particular time periods and plot them against the observed network (we could also run a movie over all of the simulated networks). Here we will take the network from time period 10. We will use the network.extract() function, setting at to 10.
+
+```{r obs-0-10}
+net10 <- network.extract(sim_mod4, at = 10)
+```
+
+```{r o-0-10-net}
+par(mfrow = c(1, 2))
+plot(talk_time1, main = "Observed from 0-10 Minutes")
+plot(net10, main = "Example simulated network")
+```
+
+Looks okay on the whole, although we might consider adding additional homophliy terms to try and deal with the over count of intransitive triads.
+
+Overall, our results suggest that seating arrangements structure the formation of interaction ties. Individuals sitting close together are likely to initiate interactions. Gender and race have relatively weak effects on the formation of ties. For example, even though there is one group of isolated girls, the overall effect of gender on formation of ties is not particularly strong. We also see that students tend to form new ties to people in their social cluster, with students initiating talking relationships with other students who have the same (current) partners as themselves. The tie persistence results are less clear, with few good predictors in the persistence model. In sum, the results suggest that classroom interactions are largely based on opportunity structure and norms of interaction: one tends to talk to other students in close proximity (socially or physically); once an initial discussion relationship is prompted, however, the interaction between i-j has its own internal dynamics largely independent of other, external factors.
+
+
+
+
+
+
+
+
+

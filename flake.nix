@@ -43,12 +43,14 @@
             myvscode
             (with rPackages; [
               CAinterprTools #
+              EpiModel
               FactoMineR #
               GGally #
               NLP #
               NbClust #
               RColorBrewer #
               Rglpk
+              RSiena
               SnowballC #
               bookdown
               car #
@@ -73,6 +75,7 @@
               memoise
               nabor
               ndtv #
+              netdiffuseR
               network #
               networkD3 #
               networkDynamic #
@@ -82,7 +85,9 @@
               plot3D #
               png
               quarto #
+              relevent
               reshape #
+              reshape2
               rgrass
               sf
               sfnetworks
