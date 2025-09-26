@@ -1,12 +1,7 @@
 ---
 title: "3.1-CrossSectionalData"
-format: 
-  html:
-    toc: true
-    keep-md: true
-  gfm: default
+format: gfm
 ---
-
 
 ```{r, setup, include=FALSE}
 knitr::opts_chunk$set(paged.print = FALSE)
@@ -22,8 +17,8 @@ library(reshape)
 # Reading data
 
 ```{r}
-url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class555_matrix.csv"
-class_mat <- read.csv(file = url1)
+# url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class555_matrix.csv"
+class_mat <- read.csv("data/class555_matrix.csv")
 class(class_mat)
 ```
 
@@ -35,8 +30,10 @@ class_mat
 ```
 
 ```{r}
-url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class555_attributedata.csv"
-class_attributes <- read.csv(file = url2, stringsAsFactors = T)
+# url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class555_attributedata.csv"
+class_attributes <- read.csv("data/class555_attributedata.csv",
+  stringsAsFactors = T
+)
 class_attributes
 ```
 
@@ -83,9 +80,9 @@ class_net_by_matrix
 ## Construction from edge list
 
 ```{r}
-url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class555_edgelist.csv"
+# url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class555_edgelist.csv"
 
-class_edges <- read.csv(file = url3)
+class_edges <- read.csv("data/class555_edgelist.csv")
 head(class_edges)
 ```
 
@@ -114,7 +111,7 @@ V(class_net_by_edges)$name
 
 As discussed above, the edgelist does not contain information about isolates. If there are isolates in the network and we want to construct the network from an edgelist, we need to be careful.
 
-```{r}
+```{r gfdf-csd-1}
 net <- graph_from_data_frame(
   d = class_edges, directed = T,
   vertices = (id <- 1:26)
@@ -155,9 +152,9 @@ as_adjacency_matrix(graph = class_net_by_edges)
 ## Construction from adjacency list
 
 ```{r}
-url4 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class555_adjacency_list.csv"
+# url4 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class555_adjacency_list.csv"
 
-class_adjacency <- read.csv(file = url4)
+class_adjacency <- read.csv("data/class555_adjacency_list.csv")
 class_adjacency
 ```
 
