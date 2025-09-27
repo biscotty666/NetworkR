@@ -1,0 +1,721 @@
+---
+title: "Social Influence: Coevolution of Networks and Behaviors"
+format: gfm
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+```
+
+How do actors come to resmble their peers in terms of behaviors? Simulation Investigation for Empirical Network models are suitable for small networks, eg. n < 2500.
+
+SIENA models are similar to STERG models, but examines changes in behaviors as well as changes in ties.
+
+
+The first example utilizes a small classroom-based network. The data were collected by Daniel McFarland. There are two waves of data, corresponding to semester 1 and semester 2. The key outcome of interest is how much each student liked the subject of the class, measured in both semester 1 and semester 2. There is also data on friendships for both semesters. We want to know if students tend to converge on attitudes (about how much they like the subject) with people they are friends with. We also want to see how peer influence fits into a larger picture of network change, where ties are being added and dropped over time. For example, are students similar in terms of liking the subject because of peer influence or because they select friends with similar attitudes about the class (i.e., we want to differentiate between influence and selection)? 
+
+# Preparation
+
+```{r}
+# url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class237_sem1_edgelist.txt"
+
+sem1_edgelist <- read.table("data/class237_sem1_edgelist.txt", header = T)
+
+# url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class237_sem2_edgelist.txt"
+
+sem2_edgelist <- read.table("data/class237_sem2_edgelist.txt", header = T)
+
+# url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class237_attributes.txt"
+
+attributes <- read.table("data/class237_attributes.txt", header = T)
+```
+
+```{r}
+head(sem1_edgelist)
+head(attributes)
+```
+
+Main attributes:
+
+- `ids` = id of actor
+- `sem_id` = semester where data comes from
+- `expected_grade`: D = 1 C = 2 B = 3 A = 4
+- `like_subject`: 1-4 scale, with 1 = strong dislike to 4 = like it a lot
+- `like_teacher`: 1-4 scale, with 1 = strong dislike to 4 = like it a lot.
+
+```{r}
+#| message: false
+library(igraph)
+library(reshape)
+library(car)
+```
+
+For this analysis, ignore nodes entering and exiting, and only look at those present in both semesters.
+
+```{r}
+ids_sem1 <- attributes$ids[attributes$sem_id == 1]
+ids_sem2 <- attributes$ids[attributes$sem_id == 2]
+ids_keep <- ids_sem1[ids_sem1 %in% ids_sem2]
+```
+
+```{r}
+attributes <- attributes[attributes$ids %in% ids_keep, ]
+
+send_in_sem1 <- sem1_edgelist[, 1] %in% ids_keep
+rec_in_sem1 <- sem1_edgelist[, 2] %in% ids_keep
+sem1_edgelist <- sem1_edgelist[send_in_sem1 & rec_in_sem1, ]
+
+send_in_sem2 <- sem2_edgelist[, 1] %in% ids_keep
+rec_in_sem2 <- sem2_edgelist[, 2] %in% ids_keep
+sem2_edgelist <- sem2_edgelist[send_in_sem2 & rec_in_sem2, ]
+```
+
+```{r}
+sem1_attributes <- attributes[attributes$sem_id == 1, ]
+sem2_attributes <- attributes[attributes$sem_id == 2, ]
+```
+
+```{r}
+sem1_net <- graph_from_data_frame(
+  d = sem1_edgelist, directed = T, vertices = sem1_attributes
+)
+
+sem2_net <- graph_from_data_frame(
+  d = sem2_edgelist, directed = T, vertices = sem2_attributes
+)
+```
+
+Create node colors depending on liking the subject
+
+```{r}
+cols_sem1 <- recode(sem1_attributes$like_subject,
+  as.factor = F,
+  "1 = 'blue'; 2 = 'light blue'; 3 = 'pink';
+                     4 ='red'; NA = 'black'"
+)
+
+cols_sem2 <- recode(sem2_attributes$like_subject,
+  as.factor = F,
+  "1 = 'blue'; 2 = 'light blue'; 3 = 'pink';
+                     4 = 'red'; NA = 'black'"
+)
+```
+
+```{r}
+layout <- layout_with_fr(sem1_net)
+```
+
+```{r sem1-net-graph-plot}
+par(mfrow = c(1, 2))
+
+plot(sem1_net,
+  vertex.label = NA, layout = layout, edge.arrow.size = .3,
+  edge.arrow.width = 1, edge.color = "light gray",
+  vertex.frame.color = NA, vertex.color = cols_sem1
+)
+
+plot(sem2_net,
+  vertex.label = NA, layout = layout, edge.arrow.size = .3,
+  edge.arrow.width = 1, edge.color = "light gray",
+  vertex.frame.color = NA, vertex.color = cols_sem2
+)
+```
+
+It looks like there may be some weak clustering by how much people like the subject. It is a bit difficult to tell from the plot if people are converging with their friend's attitudes, although it does look like students who really like the subject in semester 1 tend to have more moderate views by semester 2 (moving from red to pink). That could be a sign of peer influence, but we need to examine such hypotheses more carefully.
+
+# SIENA Model Setup
+
+The question is whether students converge with their friends in terms of how much they like the subject matter. We will address this question while also considering the larger context in which actors are forming and breaking ties. With SIENA models, the basic idea is to model the coevolution of network ties and outcomes, simultaneously predicting changes in ties (what factors make a friendship more likely to be added/kept?) and changes in behaviors (what factors make it more likely to increase liking the subject?). In this way, we can explore the existence (or not) of peer influence while also controlling for nodal, dyadic and triadic processes that affect both the formation of ties and the outcome of interest (here interest in the subject). 
+
+```{r}
+library(RSiena)
+```
+
+**RSiena** requires that, before the model is run, the data be shaped into objects specifying their role in the analysis. 
+
+Turn graphs in matrices.
+
+```{r}
+sem1_matrix <- as_adjacency_matrix(graph = sem1_net, sparse = F)
+sem2_matrix <- as_adjacency_matrix(graph = sem2_net, sparse = F)
+table(rownames(sem1_matrix) == rownames(sem2_matrix))
+```
+
+How much change from sem 1 to sem 2?
+
+```{r}
+tab_change <- table(sem1_matrix, sem2_matrix)
+tab_change
+```
+
+42 stable, 58 new, 47 dropped.
+
+> Jaccard index
+
+N11 / (N01 + N10 + N11)
+
+Should be above .3 and should not be below .2. 
+
+```{r}
+42 / (58 + 47 + 42)
+```
+
+Somewhat ambiguous, though close to .3. Lower values are less problematic when average degree is increasing or decreasing, as here.
+
+Make sure ids are in the same order.
+
+```{r}
+table(sem1_attributes$ids == sem2_attributes$ids)
+```
+
+RSiena requires that the networks be put together as an n X n X p array, where n is the size of the network and p is the number of time periods. 
+
+```{r}
+net_size <- nrow(sem1_matrix)
+sem12_array <- array(c(sem1_matrix, sem2_matrix),
+  dim = c(net_size, net_size, 2)
+)
+dim(sem12_array)
+```
+
+Since we model network change and behavior change, we need two kinds of models and two kinds of dependent variables.
+
+As a first step, we will construct a dependent variable based on the network, so the ties (or tie change) is the outcome of interest. The function is sienaDependent(). The main arguments are:
+
+- netarray = matrix (for behaviors) or array (for network outcomes) showing behavioral or network values to predict
+- type = type of dependent variable (e.g., behavior, oneMode)
+
+Here we include the array constructed above based on the semester 1 and semester 2 networks. The type is oneMode, indicating a one-mode network.
+
+```{r}
+networks <- sienaDependent(netarray = sem12_array, type = "oneMode")
+```
+
+Now, we will construct the second dependent variable, based on our 'behavior' of interest, here how much they liked the subject in semester 1 and semester 2. The inputs are the over time values for liking the subject, constructed as a matrix.
+
+```{r}
+like_subject_matrix <- as.matrix(cbind(
+  sem1_attributes$like_subject,
+  sem2_attributes$like_subject
+))
+head(like_subject_matrix)
+```
+
+```{r}
+like_subject <- sienaDependent(
+  netarray = like_subject_matrix,
+  type = "behavior"
+)
+```
+
+Create predictor objects (covariates). varCovar() is used with at least 3 periods of data when the attribute is not static.
+
+```{r}
+like_teacher <- coCovar(sem1_attributes$like_teacher)
+```
+
+```{r}
+net_behavior_covar <- sienaDataCreate(networks, like_subject, like_teacher)
+net_behavior_covar
+```
+
+# Model Specification
+
+The model is built up from basic effects and adding additional effects.
+
+```{r}
+siena_effects <- getEffects(net_behavior_covar)
+siena_effects
+```
+
+The two different models are "networks" for how the network changes over time, and "like_subject" for how the attitude changes.
+
+## Behavioral model
+
+The function to add terms is includeEffects(). The main arguments are:
+
+- myeff = siena object of effects
+- name of term to include
+- interaction1 = siena object from which effects are being calculated
+- name = name of dependent variable for which effects are being included
+
+For the peer influence term, use avSim, or average similarity to network alters. It uses the "network" data, with the outcome of interest "like_subject"
+
+```{r}
+siena_effects <- includeEffects(siena_effects, avSim,
+  interaction1 = "networks",
+  name = "like_subject"
+)
+```
+
+Capture the tendency of higher indegree people to increase liking compared to low indegree people.
+
+```{r}
+siena_effects <- includeEffects(siena_effects, indeg,
+  interaction1 = "networks",
+  name = "like_subject"
+)
+```
+
+Add a factor for how much the student likes the teacher
+
+```{r}
+siena_effects <- includeEffects(siena_effects, effFrom,
+  interaction1 = "like_teacher",
+  name = "like_subject"
+)
+```
+
+## Network model
+
+The evolution of friendship ties is the outcome of interest. Here are 4 common terms.
+
+Do actors form and keep ties based on similar attitudes or behaviors.
+
+```{r}
+siena_effects <- includeEffects(siena_effects, simX,
+  interaction1 = "like_subject",
+  name = "networks"
+)
+```
+
+Do people with certain attributes send out more/less ties? Do they receive more or less?
+
+```{r}
+siena_effects <- includeEffects(siena_effects, egoX,
+  interaction1 = "like_subject",
+  name = "networks"
+)
+siena_effects <- includeEffects(siena_effects, altX,
+  interaction1 = "like_subject",
+  name = "networks"
+)
+```
+
+Add a term for transitivity, or local clustering.
+
+```{r}
+siena_effects <- includeEffects(siena_effects, transTrip, name = "networks")
+```
+
+```{r}
+siena_effects
+```
+
+# Model Estimation
+
+We will now go ahead and estimate our model. Before we can estimate the model we need to create an object of input specifications using the sienaAlgorithmCreate() function. There are a number of possible inputs but here we will leave most things at the defaults. We will include a MaxDegree argument, telling the model what is the max degree possible in the network. We set MaxDegree to 5 as students were restricted to naming only up to 5 friends in the classroom. 
+
+```{r}
+input_options <- sienaAlgorithmCreate(
+  projname = "class_model",
+  MaxDegree = c(networks = 5),
+  seed = 30000
+)
+```
+
+Now, we are ready to estimate the model using the siena07() function. The main arguments are:
+
+- x = object of input specifications constructed using sienaAlgorithmCreate()
+- data = main siena object constructed from sienaDataCreate() function
+- effects = model effects specified using includeEffects() function
+- useCluster = T/F; should we use multiple clusters?
+- nbrNodes = number of processors to use
+
+```{r}
+mod1 <- siena07(
+  x = input_options, data = net_behavior_covar,
+  effects = siena_effects, useCluster = TRUE,
+  nbrNodes = 4
+)
+```
+
+```{r}
+mod1
+```
+
+```{r}
+mod2 <- siena07(
+  x = input_options, data = net_behavior_covar,
+  effects = siena_effects, useCluster = TRUE,
+  returnDeps = TRUE, nbrNodes = 2
+)
+mod2
+```
+
+The overall convergence ratio is under .25. For each parameter, convergence rates shoule be under .1 (absolute value). Convergence looks good here.
+
+The main items of interest in our results are the estimates and the standard errors. Note that by dividing the estimates by the standard errors we can do traditional t-tests on the coefficients. For example, we can calculate the t-statistic for reciprocity (0.3977 / 0.2482) = 1.602, suggestive of a positive, but not significant, effect of reciprocity on the formation and keeping of ties.
+
+The peer influence seems high, but a large standard error suggests the estimate is uncertain.
+
+Create a simpler model by removing effects and increasing iterations
+
+```{r}
+siena_effects <- includeEffects(siena_effects, indeg,
+  interaction1 = "networks",
+  name = "like_subject", inclue = FALSE
+)
+siena_effects <- includeEffects(siena_effects, effFrom,
+  interaction1 = "like_teacher",
+  name = "like_subject", include = FALSE
+)
+```
+
+Increase the number of iterations used in phase 3.
+
+```{r}
+input_options <- sienaAlgorithmCreate(
+  projname = "class_model",
+  MaxDegree = c(networks = 5),
+  n3 = 3000, seed = 30000
+)
+```
+
+Use returnDeps to return the simulated networks.
+
+```{r}
+mod3 <- siena07(
+  x = input_options, data = net_behavior_covar,
+  effects = siena_effects, returnDeps = TRUE,
+  useCluster = TRUE, nbrNodes = 2
+)
+```
+
+```{r}
+mod3
+```
+
+Similar estimates, still high standard errors. This suggests that the limited data is the problem.
+
+# Interpretation
+
+## Network model
+
+The coefficients can be understood as increasing/decreasing the ratio of the log-probability that i adds (or keeps) a tie to j compared to i adding (or keeping) a tie to h, where j and h are different nodes in the network with different attributes and structural positions relative to i. For example, we see a coefficient for reciprocity of 0.399. This would suggest that the odds of a tie from i being sent to j is exp(0.399) times higher than being sent to h, assuming that j->i exists but h->i does not.
+
+## Behavioral model
+
+We now turn to the behavioral model, where we are particularly interested in peer influence effects. Note that our average similarity term had very high standard errors and we should be hesitant in pushing the interpretation of that coefficient too far, even as we use that coefficient in our calculations below. More generally, peer influence effects can be a little tricky to interpret as we need to incorporate the proper functional form used in the evaluation function and we need to include multiple terms in interpreting the effect of peer influence (in particular the linear and quadratic shape terms along with the average similarity term). Our goal here is to calculate a table of peer influence that shows how strongly students are drawn to having the same values as their peers. We will calculate the evaluation function for different students with friends who are more/less similar to them. This table of peer influence effects will aid in interpretation.
+
+[Library link](https://www.stats.ox.ac.uk/~snijders/siena/InfluenceTables.r)
+
+```{r}
+source("InfluenceTables.r")
+```
+
+The main function we will make use of is influenceMatrix(). The arguments are:
+
+- x = estimated model
+- xd = siena network/behavior object
+- netname = network relation name
+- behname = behavioral name
+- levls = levels possible for behavioral outcome
+
+```{r}
+influence_matrix <- influenceMatrix(
+  x = mod2, xd = net_behavior_covar,
+  netname = "networks", behname = "like_subject",
+  levls = 1:4
+)
+```
+
+```{r}
+influence_matrix
+```
+
+Columns are ego behavior, rows are friends behavior, in this case, how much they like the subject. If ego is at 1, and his friends are at two, the odds of shifting to 2 are
+
+```{r}
+exp(1.5035) / exp(-.6708)
+```
+
+In this case, with a standard error so high, this is very uncertain.
+
+# Checking Model Fit
+
+Let's first see if the model is reproducing the indegree distribution. The function is `sienaGOF()`. The arguments are:
+
+- sienaFitObject = model,
+- auxiliaryFunction = function to calculate
+- varName = network relation or behavior of interest
+
+```{r}
+gof1 <- sienaGOF(
+  sienaFitObject = mod2,
+  auxiliaryFunction = IndegreeDistribution,
+  verbose = TRUE, join = TRUE, varName = "networks"
+)
+```
+
+```{r gof-idd-plot}
+plot(gof1)
+```
+
+Fit seems okay, now triad census.
+
+```{r}
+gof2 <- sienaGOF(
+  sienaFitObject = mod2,
+  auxiliaryFunction = TriadCensus,
+  verbose = T, join = T, varName = "networks"
+)
+```
+
+```{r gof2-triadcensus-plot}
+plot(gof2, center = T, scale = T)
+```
+
+Fit okay. Overall behavior distribution:
+
+```{r gof-beh-dist-plot}
+#| message: false
+#| warning: false
+gof_behavior <- sienaGOF(
+  sienaFitObject = mod2,
+  auxiliaryFunction = BehaviorDistribution,
+  varName = "like_subject"
+)
+plot(gof_behavior)
+```
+
+# Three Time Periods
+
+The data are based on students in a secondary school in Glasgow. The data contain friendship information, demographic information and substance use data for three waves. Here we focus on alcohol use. 
+
+[Data Source](https://www.stats.ox.ac.uk/~snijders/siena/Glasgow_data.htm)
+
+```{r}
+# url4 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/Glasgow-friendship.RData"
+
+load("data/Glasgow-friendship.RData")
+
+# url5 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/Glasgow-substances.RData"
+
+load("data/Glasgow-substances.RData")
+
+# url6 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/Glasgow-demographic.RData"
+
+load("data/Glasgow-demographic.RData")
+```
+
+```{r}
+friendship.1[1:10, 1:10]
+```
+
+The friendship data is housed in friendship.1, friendship.2 and friendship.3. Each is a matrix showing if there is a tie between i and j, where 0 = no tie; 1 = best friend; 2 = friend; 10 = structural absence of tie (as at least one student in the ij pair was not in the school for that wave). There are also some NAs in the matrices, indicating that there is no information on whether a tie exists between i and j.
+
+```{r}
+head(alcohol)
+```
+
+The data show the value on alcohol use in the three waves of data: 1 = none; 2 = once or twice a year; 3 = once a month; 4 = once a week; 5 = more than once a week.
+
+It is generally considered problematic if one has more than 20% missing data. 
+
+All students kept, with structural 0 (10 in RSiena) to show no tie possible if a student is missing for a period.
+
+Simplify, not distinguishing between friend and best friend, so it is binary.
+
+```{r}
+friendship.1[friendship.1 == 2] <- 1
+friendship.2[friendship.2 == 2] <- 1
+friendship.3[friendship.3 == 2] <- 1
+```
+
+```{r}
+net_size_ex2 <- nrow(friendship.1)
+
+net_array <- array(c(friendship.1, friendship.2, friendship.3),
+  dim = c(net_size_ex2, net_size_ex2, 3)
+)
+dim(net_array)
+```
+
+```{r}
+friendship <- sienaDependent(
+  netarray = net_array,
+  type = "oneMode"
+)
+friendship
+```
+
+Create a siena object for alcohol behavior
+
+```{r}
+alcohol_depvar <- sienaDependent(
+  netarray = alcohol,
+  type = "behavior"
+)
+alcohol_depvar
+```
+
+Create a gender covariate.
+
+```{r}
+head(sex.F)
+```
+
+```{r}
+gender <- coCovar(sex.F)
+```
+
+```{r}
+friend_behavior_covar <- sienaDataCreate(
+  friendship, alcohol_depvar, gender
+)
+friend_behavior_covar
+```
+
+## Model Specification and Estimation
+
+Start with a base model
+
+```{r}
+siena_effects_3wave_example <- getEffects(friend_behavior_covar)
+siena_effects_3wave_example
+```
+
+Add the peer influence term
+
+```{r}
+siena_effects_3wave_example <- includeEffects(
+  siena_effects_3wave_example, avSim,
+  interaction1 = "friendship", name = "alcohol_depvar"
+)
+```
+
+Include gender's effect on drinking behavior
+
+```{r}
+siena_effects_3wave_example <- includeEffects(
+  siena_effects_3wave_example, effFrom,
+  interaction1 = "gender", name = "alcohol_depvar"
+)
+```
+
+Include terms to predict friendship ties as the outcome.
+
+```{r}
+siena_effects_3wave_example <- includeEffects(
+  siena_effects_3wave_example, egoX,
+  interaction1 = "alcohol_depvar", name = "friendship"
+)
+siena_effects_3wave_example <- includeEffects(
+  siena_effects_3wave_example, altX,
+  interaction1 = "alcohol_depvar", name = "friendship"
+)
+```
+
+Include a term for selection on drinking behavior.
+
+```{r}
+siena_effects_3wave_example <- includeEffects(
+  siena_effects_3wave_example, simX,
+  interaction1 = "alcohol_depvar", name = "friendship"
+)
+```
+
+A term for transitivity closure
+
+```{r}
+siena_effects_3wave_example <- includeEffects(
+  siena_effects_3wave_example, transTrip,
+  name = "friendship"
+)
+```
+
+```{r}
+siena_effects_3wave_example
+```
+
+Students were limited to naming 6 friends.
+
+```{r}
+input_options_3wave <- sienaAlgorithmCreate(
+  MaxDegree = c(friendship = 6), n3 = 3000, seed = 5000
+)
+```
+
+Estimate the model
+
+```{r}
+mod1_3wave_example <- siena07(
+  input_options_3wave,
+  data = friend_behavior_covar,
+  effects = siena_effects_3wave_example, returnDeps = T,
+  initC = T, useCluster = T, nbrNodes = 2
+)
+```
+
+```{r}
+mod1_3wave_example
+```
+
+The model converges, and standard errors are much lower. Similarity is higher (7.1645) and the standard error is much lower. The effect is significan, with a t-statistic of 3.184 (7.1645 / 2.2501). We also see that reciprocity is quite strong, as is the tendency for transitive relations. We also see that there is selection on alcohol use (a coefficient of 0.7936 and a standard error of 0.3594 for similarity), suggesting that not only do students tend to converge to the behaviors of their peers, they also tend to seek out those with similar drinking behavior. 
+
+```{r}
+influence_matrix_3wave <- influenceMatrix(
+  x = mod1_3wave_example, xd = friend_behavior_covar,
+  netname = "friendship", behname = "alcohol_depvar",
+  levls = 1:5
+)
+```
+
+```{r}
+influence_matrix_3wave
+```
+
+```{r}
+gof_3wave <- sienaGOF(mod1_3wave_example, IndegreeDistribution,
+  verbose = T, join = T, varName = "friendship"
+)
+```
+
+```{r gof-3wave-indeg-dist-plot}
+plot(gof_3wave)
+```
+
+```{r gof-beh-3wave-plot}
+gof_behavior_3wave <- sienaGOF(
+  mod1_3wave_example, BehaviorDistribution,
+  varName = "alcohol_depvar"
+)
+
+plot(gof_behavior_3wave)
+```
+
+## Time Heterogeneity
+
+Comparing the difference in estimates from T1 to T2 vs T2 and T3.
+
+```{r}
+time_test <- sienaTimeTest(mod1_3wave_example)
+summary(time_test)
+```
+
+The results of the joint significance tests do not show a p-value low enough to reject the null hypothesis that the effects are the same.
+
+If we had found significant differences we may want to include terms that allow the coefficients (at least some of them) to vary by time. In particular, we would want to look at the significance tests on the specific coefficients interacted with time; here we would focus on the series of coefficients starting with 'Dummy 2', looking at which cases there is a significant t-test (suggesting that the coefficient for T2 - T3, for example, is different than the coefficient in T1 - T2). We would then use an includeTimeDummy() function to include the desired terms, allowing those coefficients to vary across time. For example, let's run through a quick example where we allow the coefficients on density and transitive triplets to vary between the first period of change (T1 to T2) and the second (T2 to T3).
+
+```{r}
+siena_effects_3wave_example <- includeTimeDummy(
+  siena_effects_3wave_example, density, transTrip,
+  timeDummy = "2"
+)
+siena_effects_3wave_example
+```
+
+```{r}
+mod2_3wave_example <- siena07(
+  input_options_3wave,
+  data = friend_behavior_covar,
+  effects = siena_effects_3wave_example, returnDeps = T,
+  initC = T, useCluster = T, nbrNodes = 2
+)
+
+mod2_3wave_example
+```
+
+We see that there are now interactions between time and two terms (density and transitive triplets). These two are labeled as 'friendship ego' and 'friendship ego X transitive triplets'. For example, we can see that there is some evidence that the effect of transitivity is higher in later time periods than in earlier ones.
