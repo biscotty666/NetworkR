@@ -1,10 +1,6 @@
 ---
 title: "Network Centrality and Hierarchy"
-format: 
-  html:
-    toc: true
-    keep-md: true
-  gfm: default
+format: gfm
 ---
 
 
@@ -21,9 +17,9 @@ library(igraph)
 ```
 
 ```{r}
-url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/social_interactions_s641.csv"
+# url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/social_interactions_s641.csv"
 
-social_data <- read.csv(file = url1)
+social_data <- read.csv("data/social_interactions_s641.csv")
 head(social_data)
 ```
 
@@ -66,7 +62,7 @@ s641_task <- graph_from_data_frame(
 ```
 
 
-```{r}
+```{r soc-int-s641-1}
 par(mfrow = c(1, 2))
 
 plot(s641_social,
@@ -213,7 +209,7 @@ social_long <- melt(central_social[, vars_to_stack], id.vars = "ids")
 str(social_long)
 ```
 
-```{r}
+```{r soc-long-centrality-1}
 library(ggplot2)
 
 ggplot(social_long, aes(x = factor(ids, levels = 1:length(ids)), y = value)) +
@@ -227,7 +223,7 @@ ggplot(social_long, aes(x = factor(ids, levels = 1:length(ids)), y = value)) +
 
 Note that, while a number of nodes have prominence, only node 22 plays a bridging role.
 
-```{r}
+```{r class-s641-soc-talk}
 plot(s641_social,
   layout = layout.fruchterman.reingold,
   vertex.label = V(s641_social)$name, vertex.size = central_social$between / 5,
@@ -289,7 +285,7 @@ apply(central_task[, -c(1, 2)],
 )
 ```
 
-```{r}
+```{r talk-inter-class-s641}
 plot(s641_task,
   vertex.size = central_task$degree, vertex.label = V(s641_social)$name,
   edge.arrow.size = 0.25, layout = layout.fruchterman.reingold,
@@ -327,7 +323,7 @@ social_task_long$variable <- recode(social_task_long$variable,
 )
 ```
 
-```{r}
+```{r facet-plot-soc-task-long}
 ggplot(
   social_task_long,
   aes(
@@ -405,7 +401,7 @@ den_social <- density(indegree_social, from = 0)
 den_task <- density(degree_task, from = 0)
 ```
 
-```{r}
+```{r deg-dist-soc-task-net-1}
 plot(range(den_social$x, den_task$x), range(den_social$y, den_task$y),
   type = "n", xlab = "degree", ylab = "density",
   main = "Degree Distribution fo Social and Task Networks"
