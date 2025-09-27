@@ -1,10 +1,6 @@
 ---
 title: "Dyads and Triads"
-format: 
-  html:
-    toc: true
-    keep-md: true
-  gfm: default
+format: gfm
 ---
 
 
@@ -18,9 +14,9 @@ options(digits = 5)
 We will make use of a data set collected by David Krackhardt. The data are based on three relations collected on workers in a single organization. Krackhardt asked employees at a high-tech firm that was undergoing a union certification campaign, to whom they reported, with whom they were friends, and to whom they go to for advice. These relationships provide insight into the firm's embedded social structure, which may play a strong role in shaping opinion and opinion change.
 
 ```{r}
-url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/krackhardt_advice.csv"
+# url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/krackhardt_advice.csv"
 
-advice_data_frame <- read.csv(file = url1)
+advice_data_frame <- read.csv("data/krackhardt_advice.csv")
 head(advice_data_frame)
 ```
 
@@ -31,9 +27,9 @@ advice_edgelist <- advice_data_frame[advice_data_frame$advice_tie == 1, ]
 ```
 
 ```{r}
-url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/krackhardt_attributes.csv"
+# url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/krackhardt_attributes.csv"
 
-attributes <- read.csv(file = url2)
+attributes <- read.csv("data/krackhardt_attributes.csv")
 attributes
 ```
 
@@ -51,9 +47,9 @@ krack_advice
 ```
 
 ```{r}
-url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/krackhardt_friendship.csv"
+# url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/krackhardt_friendship.csv"
 
-friends_data_frame <- read.csv(file = url3)
+friends_data_frame <- read.csv("data/krackhardt_friendship.csv")
 head(friends_data_frame)
 ```
 
@@ -75,7 +71,7 @@ library(GGally)
 indeg_advice <- degree(krack_advice, cmode = "indegree")
 ```
 
-```{r}
+```{r krack-advice-net-1}
 ggnet2(krack_advice,
   node.color = "LEVEL", node.size = indeg_advice,
   palette = c("1" = "navy", "2" = "blue", "3" = "lightskyblue"),
@@ -85,7 +81,7 @@ ggnet2(krack_advice,
   guides(size = "none")
 ```
 
-```{r}
+```{r krack-friendship-net-1}
 indeg_friendship <- degree(krack_friendship, "indegree")
 
 ggnet2(krack_friendship,
