@@ -103,6 +103,7 @@
               tnet #
               topicmodels #
               tsna
+              webshot
             ])
           ];
           shellHook = ''

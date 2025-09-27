@@ -1,10 +1,6 @@
 ---
 title: "6 - Ego Network Data"
-format: 
-  html:
-    toc: true
-    keep-md: true
-  gfm: default
+format: gfm
 ---
 
 
@@ -25,9 +21,9 @@ Ego network data are based on a sample of individuals and are commonly used in t
 Our example ego network data come from the 1985 General Social Survey ego network module. The GSS is a nationally representative survey that is fielded yearly, including basic demographic information, socio-economic measures and the like. In addition to the core survey given each year, the GSS will include rotating modules, including occasional modules on social networks. Here, we will work with ego network data from the GSS that has been preprocessed into three different files: a file with the ego attributes; a file with the alter attributes; and a file with the alter-alter ties. 
 
 ```{r}
-url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/gss1985_ego_dat.csv"
+# url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/gss1985_ego_dat.csv"
 
-ego_dat <- read.csv(file = url1, stringsAsFactors = F)
+ego_dat <- read.csv("data/gss1985_ego_dat.csv", stringsAsFactors = F)
 str(ego_dat)
 ```
 
@@ -38,16 +34,16 @@ ego_dat <- ego_dat[!is.na(ego_dat$NUMGIVEN), ]
 ```
 
 ```{r}
-url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/gss1985_alter_dat.csv"
+# url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/gss1985_alter_dat.csv"
 
-alter_dat <- read.csv(file = url2, stringsAsFactors = F)
+alter_dat <- read.csv("data/gss1985_alter_dat.csv", stringsAsFactors = F)
 str(alter_dat)
 ```
 
 ```{r}
-url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/gss1985_alteralter_dat.csv"
+# url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/gss1985_alteralter_dat.csv"
 
-alteralter_dat <- read.csv(file = url3)
+alteralter_dat <- read.csv("data/gss1985_alteralter_dat.csv")
 str(alteralter_dat)
 ```
 
@@ -153,14 +149,14 @@ alter_dat[alter_dat$CASEID == 19850001, "SEX"]
 
 plot first three networks
 
-```{r}
+```{r plot-f3-net}
 par(mfrow = c(1, 3))
 purrr::walk(igraph_nets[1:3], plot)
 ```
 
 alternatively
 
-```{r}
+```{r plot-f3-net-2}
 par(mfrow = c(1, 3))
 lapply(igraph_nets[1:3], plot)
 ```
@@ -173,7 +169,7 @@ plot_colorgender <- function(nets) {
 }
 ```
 
-```{r}
+```{r plot-color-gender-1}
 par(mfrow = c(1, 3))
 purrr::walk(igraph_nets[1:3], plot_colorgender)
 ```
@@ -511,9 +507,9 @@ ALTEREDUC is more important than EDUC
 # One input file
 
 ```{r}
-url4 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/gss1985_egonetworks.csv"
+# url4 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/gss1985_egonetworks.csv"
 
-egonets <- read.csv(file = url4)
+egonets <- read.csv("data/gss1985_egonetworks.csv")
 head(egonets)
 ```
 
