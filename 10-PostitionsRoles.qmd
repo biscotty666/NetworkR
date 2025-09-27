@@ -1,16 +1,11 @@
 ---
 title: "Positions and Roles"
-format: 
-  html:
-    toc: true
-    keep-md: true
-  gfm: default
+format: gfm
 ---
 
 
 ```{r, setup, include=FALSE}
 knitr::opts_chunk$set(paged.print = FALSE)
-options(digits = 5)
 ```
 
 Goal: position nodes based on patterns of ties to others and describe the patterns or roles that exist between nodes and groups of nodes.
@@ -25,16 +20,16 @@ library(igraph)
 ```
 
 ```{r}
-url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class182_networkdata.csv"
+# url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class182_networkdata.csv"
 
-class182_networkdata <- read.csv(file = url1)
+class182_networkdata <- read.csv("data/class182_networkdata.csv")
 head(class182_networkdata)
 ```
 
 ```{r}
-url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class182_attributedata.csv"
+# url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class182_attributedata.csv"
 
-class182_attributes <- read.csv(file = url2)
+class182_attributes <- read.csv("data/class182_attributedata.csv")
 head(class182_attributes)
 ```
 
@@ -160,7 +155,7 @@ x <- fit[, 1]
 y <- fit[, 2]
 ```
 
-```{r}
+```{r 2-dim-mds-1}
 plot(x, y,
   xlab = "Coordinate 1", ylab = "Coordinate 2",
   main = "2 Dim MDS solution", type = "n"
@@ -174,7 +169,7 @@ Different from finding groups or communities. In this case, it is based on patte
 
 Many different approaches possible. This example uses `hclust()`.
 
-```{r}
+```{r clus-dend-euc}
 hc <- hclust(euclid_dist)
 plot(hc)
 ```
@@ -183,12 +178,12 @@ Eg., the maximum distance between 10, 15, 1 and 12 is a bit below 8.
 
 To cut the tree at an arbitrary height.
 
-```{r}
+```{r clust-dent-1-class}
 plot(hc)
 plot_clusters <- rect.hclust(hc, h = 12)
 ```
 
-```{r}
+```{r clust-dend-2-class}
 plot(hc)
 rect.hclust(hc, h = 8)
 ```
@@ -239,7 +234,7 @@ id_dat
 social_mat_rearrange <- social_mat[id_dat$ids, id_dat$ids]
 ```
 
-```{r}
+```{r soc-mat-heat-1}
 library(RColorBrewer)
 
 column_cols <- c("red", "green", "black", "blue")
@@ -380,7 +375,7 @@ E(blockmod_igraph)$color <- cols
 E(blockmod_igraph)$width <- block_dat[, "WeightRecode"]
 ```
 
-```{r}
+```{r block-mod-graph-1}
 plot(blockmod_igraph, margins = 0.2)
 ```
 
@@ -406,7 +401,7 @@ social_edge <- E(blockmod_igraph)$type == "social"
 edge_loop_angles[self_loop & social_edge] <- 3 * pi / 3
 ```
 
-```{r}
+```{r block-mod-igraph-2}
 plot(blockmod_igraph,
   edge.arrow.mode = arrow_mode,
   edge.arrow.size = 0.65, edge.arrow.width = 0.75,
@@ -550,7 +545,7 @@ observed_correlation <- cor(t(task_triads_ego))
 diag(observed_correlation) <- NA
 ```
 
-```{r}
+```{r concur-correl-clust-1}
 concor_fit <- clustConfigurations_concor(
   concor_results,
   observed_correlation
