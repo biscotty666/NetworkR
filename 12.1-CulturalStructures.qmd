@@ -1,16 +1,11 @@
 ---
 title: "Cultural Structures"
-format: 
-  html:
-    toc: true
-    keep-md: true
-  gfm: default
+format: gfm
 ---
 
 
 ```{r, setup, include=FALSE}
 knitr::opts_chunk$set(paged.print = FALSE)
-options(digits = 5)
 ```
 
 For our empirical case, we analyze textual data based on a set of sociology abstracts (drawn from recent dissertations). We are interested in discovering the latent topics that exist in the data, where each topic is defined by having a distinct pattern of words associated with it. We are also interested in seeing which abstracts get placed together and why. In this way we are trying to uncover the underlying structure of the field of sociology (as represented in abstracts), where certain words and researchers are associated with a topic and certain topics are closer to each other than others. We thus see the intuition of a network approach played out using textual data. 
@@ -28,9 +23,11 @@ library(ldatuning)
 A subset of the data
 
 ```{r}
-url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/sociologysample.csv"
+# url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/sociologysample.csv"
 
-abstracts <- read.csv(file = url1, stringsAsFactors = FALSE)
+abstracts <- read.csv("data/sociologysample.csv",
+  stringsAsFactors = FALSE
+)
 str(abstracts)
 ```
 
@@ -243,7 +240,7 @@ fitmodel <- FindTopicsNumber(
 fitmodel
 ```
 
-```{r}
+```{r find-topic-number-plot}
 #| warning: false
 
 FindTopicsNumber_plot(fitmodel)
@@ -337,11 +334,15 @@ E(abstract_word_net)$color <- rgb(.5, .5, .5, .04)
 
 ```{r}
 set.seed(106)
-svglite::svglite("images/abstract_word_net.svg")
+svglite::svglite("docs/abstract_word_net.svg")
 plot(abstract_word_net, layout = layout_with_fr)
 dev.off()
 ```
 
+```{r abs-word-net-w-fr}
+set.seed(106)
+plot(abstract_word_net, layout = layout_with_fr)
+```
 
 
 
