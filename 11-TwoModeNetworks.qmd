@@ -1,16 +1,11 @@
 ---
 title: "Two-mode Networks: Affilitations and Dualities"
-format: 
-  html:
-    toc: true
-    keep-md: true
-  gfm: default
+format: gfm
 ---
 
 
 ```{r, setup, include=FALSE}
 knitr::opts_chunk$set(paged.print = FALSE)
-options(digits = 5)
 ```
 
 The data consist of students (anonymized) and the student clubs in which they are members (e.g., National Honor Society, wrestling team, cheerleading squad, etc.). The data thus allow us to capture the duality of social life in the school, as students are linked by being in the same clubs, and clubs are linked by sharing the same students.
@@ -29,9 +24,9 @@ library(igraph)
 ```
 
 ```{r}
-url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/affiliations_1996.txt"
+# url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/affiliations_1996.txt"
 
-affiliations96 <- read.delim(file = url1, check.names = FALSE)
+affiliations96 <- read.delim("data/affiliations_1996.txt", check.names = FALSE)
 dim(affiliations96)
 ```
 
@@ -45,13 +40,17 @@ affils_student1[which(affils_student1 == 1)]
 ```
 
 ```{r}
-url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/attributes_students.txt"
+# url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/attributes_students.txt"
 
-attributes_students <- read.delim(file = url2, stringsAsFactors = FALSE)
+attributes_students <- read.delim("data/attributes_students.txt",
+  stringsAsFactors = FALSE
+)
 
-url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/attributes_clubs.txt"
+# url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/attributes_clubs.txt"
 
-attributes_clubs <- read.delim(file = url3, stringsAsFactors = FALSE)
+attributes_clubs <- read.delim("data/attributes_clubs.txt",
+  stringsAsFactors = FALSE
+)
 ```
 
 The student data frame only includes students (1295 rows) and includes student specific attributes. The student specific attributes are:
@@ -212,7 +211,7 @@ plot(affil_net96, layout = layout)
 dev.off()
 ```
 
-```{r}
+```{r plot-affil-net96}
 plot(affil_net96, layout = layout)
 ```
 
@@ -244,7 +243,7 @@ plot(affil_net96_noisolates, layout = layout_with_kk)
 dev.off()
 ```
 
-```{r}
+```{r plot-affil-net96-noiso}
 plot(affil_net96_noisolates, layout = layout_with_kk)
 ```
 
@@ -254,7 +253,7 @@ plot(affil_net96_noisolates, layout = layout_with_fr)
 dev.off()
 ```
 
-```{r}
+```{r plot-affil-net96-noiso-2}
 plot(affil_net96_noisolates, layout = layout_with_fr)
 ```
 
@@ -282,7 +281,7 @@ V(affil_net96_noisolates)$frame.color[is_student_type] <- student_node_color
 V(affil_net96_noisolates)$label[!is_student_type] <- NA
 ```
 
-```{r}
+```{r plot-affil-net96-noiso-3}
 plot(affil_net96_noisolates)
 ```
 
@@ -352,7 +351,7 @@ plot(club_net96, main = "layout_with_fr", layout = layout_with_fr)
 dev.off()
 ```
 
-```{r}
+```{r plot-club-net96-1}
 plot(club_net96, main = "layout_with_lgl", layout = layout_with_lgl)
 ```
 
@@ -387,7 +386,7 @@ E(club_net96)$width <- recode_weight
 V(club_net96)$size <- 3
 ```
 
-```{r}
+```{r plot-club-net96-2}
 plot(club_net96, layout = layout_with_lgl)
 ```
 
@@ -537,7 +536,7 @@ V(club_net96)$color <- membership(groups_scaledweights)
 V(club_net96)$frame.color[deg_top10] <- rgb(1, 0, .2, .75)
 ```
 
-```{r}
+```{r plot-group-color-club}
 set.seed(105)
 group_label <- group_dat$group
 plot(club_net96,
