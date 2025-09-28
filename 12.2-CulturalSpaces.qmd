@@ -1,16 +1,11 @@
 ---
 title: "Cultural Spaces"
-format: 
-  html:
-    toc: true
-    keep-md: true
-  gfm: default
+format: gfm
 ---
 
 
 ```{r, setup, include=FALSE}
 knitr::opts_chunk$set(paged.print = FALSE)
-options(digits = 5)
 ```
 
 # Correspondence Analysis
@@ -26,9 +21,9 @@ library(NbClust)
 ```
 
 ```{r}
-url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/department_topic_data.txt"
+# url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/department_topic_data.txt"
 
-department_topic <- read.table(file = url1, header = T)
+department_topic <- read.table("data/department_topic_data.txt", header = T)
 department_topic[1:4, 1:4]
 ```
 
@@ -59,11 +54,11 @@ summary(ca_mod1, nb.dec = 2, nbelements = 5, ncp = 3)
 ```
 
 
-```{r}
+```{r fviz-ca-biplot-ca-mod1}
 fviz_ca_biplot(ca_mod1)
 ```
 
-```{r}
+```{r fviz-ca-row-ca-mod1-2}
 fviz_ca_biplot(ca_mod1,
   col.row = "orange", col.col = "steelblue",
   labelsize = 3, repel = T
@@ -71,7 +66,7 @@ fviz_ca_biplot(ca_mod1,
   theme_minimal()
 ```
 
-```{r}
+```{r fviz-ca-row-ca-mod1-1}
 fviz_ca_row(ca_mod1, col.row = "orange", labelsize = 3, repel = T) +
   theme_minimal()
 ```
@@ -87,7 +82,7 @@ eig
 
 > Scree plot
 
-```{r}
+```{r fviz-scree-plot-ca-mod1}
 fviz_screeplot(ca_mod1)
 ```
 
@@ -95,7 +90,7 @@ fviz_screeplot(ca_mod1)
 
 Another potentially useful approach is to apply the average rule heuristic, which chooses the number of dimensions by selecting all dimensions that explain more than the average dimension. 
 
-```{r}
+```{r inertia-percentage-department-topic}
 aver.rule(department_topic)
 ```
 
@@ -105,7 +100,7 @@ The dashed line indicates the average variance explained and the bars show the p
 
 This sequential test checks the significance of the remaining dimensions once the first k ones have been selected. 
 
-```{r}
+```{r malinvaud-department-topic}
 malinvaud(department_topic)
 ```
 
@@ -121,7 +116,7 @@ Make a plot of the departments
 locs_department <- ca_mod1$row$coord
 ```
 
-```{r}
+```{r text-3d-locs-dept}
 text3D(
   x = locs_department[, "Dim 1"],
   y = locs_department[, "Dim 2"],
@@ -154,7 +149,7 @@ The plot is somewhat hard to read in three dimensions, but if we look at the thi
 
 Which rows/columns are most importang in fitting a given dimension.
 
-```{r}
+```{r fviz-contrib-ca-mod1-5}
 fviz_contrib(ca_mod1, choice = "row", axes = 1) +
   theme(axis.text.x = element_text(size = 8.0, angle = 75))
 ```
@@ -163,22 +158,22 @@ The highest contributing rows are far from the center of the dimension.
 
 The second dimension:
 
-```{r}
+```{r fviz-contrib-ca-mod1-2}
 fviz_contrib(ca_mod1, choice = "row", axes = 2) +
   theme(axis.text.x = element_text(size = 8.0, angle = 75))
 ```
 
-```{r}
+```{r fviz-contrib-ca-mod1-3}
 fviz_contrib(ca_mod1, choice = "col", axes = 1) +
   theme(axis.text.x = element_text(size = 8.0, angle = 75))
 ```
 
-```{r}
+```{r fviz-ca-mod1-cont}
 fviz_contrib(ca_mod1, choice = "col", axes = 2) +
   theme(axis.text.x = element_text(size = 8.0, angle = 75))
 ```
 
-```{r}
+```{r factor-ca-biplot-1}
 fviz_ca_biplot(ca_mod1,
   col.row = "contrib", col.col = "contrib",
   labelsize = 3, repel = T
@@ -233,15 +228,12 @@ fviz_ca_biplot(ca_mod1,
   theme_minimal()
 ```
 
-```{r}
-#| echo: false
-svglite::svglite("images/CA_biplot.svg")
+```{r factor-map-biplot-1}
 fviz_ca_biplot(ca_mod1,
   col.row = row_clusters, col.col = col_clusters,
   labelsize = 3, repel = T
 ) +
   theme_minimal()
-dev.off()
 ```
 
 > Clustering rows and columns seperately
@@ -258,7 +250,7 @@ clust_cols <- HCPC(
 )
 ```
 
-```{r}
+```{r factor-map-biplot-2}
 plot(clust_rows, choice = "map", draw.tree = FALSE)
 ```
 
@@ -269,7 +261,7 @@ table(row_clusters, row_clusters2)
 
 rows and columns are the same, though not in the same order.
 
-```{r}
+```{r factor-map-biplot-3}
 plot(clust_cols, choice = "map", draw.tree = F)
 ```
 
