@@ -1,0 +1,280 @@
+---
+title: "GSS Network"
+format: 
+  gfm:
+    toc: true
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+```
+
+[Source](https://raw.githubusercontent.com/mahoffman/stanford_networks/main/data/gss_local_nets.csv)
+
+```{r}
+#| message: false
+library(dplyr)
+library(igraph)
+```
+
+# Ego Networks
+
+```{r}
+gss <- read.csv("data/gss_local_nets.csv",
+  stringsAsFactors = T
+)
+head(gss)
+```
+
+To see why these are called ego networks, let’s take a respondent and graph the relations of the up to five people they said they discussed “important matters” with. To do so, we have to first turn the variables close12 through close45 into an edge list, one for each respondent
+
+```{r}
+ties <- gss[, grepl("close", colnames(gss))]
+head(ties)
+```
+
+```{r}
+#| message: false
+gss %>%
+  select(starts_with("close")) %>%
+  head()
+```
+
+Make a matrix for each respondent, for example.
+
+```{r}
+mat <- matrix(nrow = 5, ncol = 5)
+mat[lower.tri(mat)] <- as.numeric(ties[3, ])
+```
+
+
+```{r}
+mat[upper.tri(mat)] <- t(mat)[upper.tri(mat)]
+mat
+```
+
+```{r}
+na_vals <- is.na(mat)
+non_missing_rows <- rowSums(na_vals) < nrow(mat)
+mat <- mat[non_missing_rows, non_missing_rows]
+diag(mat) <- 0
+mat
+```
+
+```{r}
+ego_net <- graph_from_adjacency_matrix(mat, mode = "undirected", weighted = T)
+```
+
+```{r ego-net-plot-1-person}
+plot(ego_net,
+  vertex.size = 30, vertex.label.color = "black",
+  vertex.label.cex = 1
+)
+```
+
+```{r}
+make_ego_nets <- function(tie) {
+  mat <- matrix(nrow = 5, ncol = 5)
+  mat[lower.tri(mat)] <- as.numeric(tie)
+  mat[upper.tri(mat)] <- t(mat)[upper.tri(mat)]
+  na_vals <- is.na(mat)
+  non_missing_rows <- rowSums(na_vals) < nrow(mat)
+  if (sum(!non_missing_rows) > 0) {
+    mat <- mat[non_missing_rows, non_missing_rows]
+  }
+  diag(mat) <- 0
+  graph_from_adjacency_matrix(mat, mode = "undirected", weighted = T)
+}
+```
+
+```{r}
+ego_nets <- lapply(1:nrow(ties),
+  FUN = function(x) make_ego_nets(ties[x, ])
+)
+head(ego_nets)
+```
+
+```{r ego-net-plot-1-person-1021}
+plot(ego_nets[[1021]])
+```
+
+# Network Size and Density
+
+```{r}
+network_sizes <- lapply(ego_nets, vcount)
+network_edge_counts <- lapply(ego_nets, ecount)
+
+head(network_sizes)
+```
+
+```{r}
+network_sizes <- unlist(network_sizes)
+mean(network_sizes, na.rm = T)
+```
+
+On average, each network as 1.8 people.
+
+```{r hist-ego-net-size-1}
+hist(network_sizes,
+  main = "Histogram of Ego Network Sizes",
+  xlab = "Network Size"
+)
+```
+
+```{r hist-ego-net-edge-count-1}
+hist(unlist(network_edge_counts),
+  main = "Histogram of Ego Network Edge Counts",
+  xlab = "# of Edges"
+)
+```
+
+```{r hist-density-ego-nets-2}
+densities <- lapply(ego_nets, graph.density) %>% unlist()
+hist(densities)
+```
+
+# Affiliation Data
+
+```{r}
+classes_data <- data.frame(
+  name = c("Leo", "Clement", "Palla", "Filippo"),
+  class1 = c("Biostatistics", "Islamic Civ", "Calc 1", "Linear Algebra"),
+  class2 = c("Chemistry", "The Modern World-System", "Calc 2", "Social Networks"),
+  class3 = c("Linear Algebra", "Exile and Diaspora", "Linear Algebra", "The Modern World-System"),
+  stringsAsFactors = FALSE
+)
+
+classes_data
+```
+
+The reshape packages will let us convert this type of data into an edgelist.
+
+```{r}
+#| warning: false
+library(reshape2)
+```
+
+```{r}
+classes_data <- melt(classes_data,
+  measure.vars = c("class1", "class2", "class3"),
+  value.name = "classes",
+  variable.name = "order"
+)
+classes_data
+```
+
+```{r}
+classes_data <- subset(classes_data, select = c("name", "classes"))
+classes_data
+```
+
+Once we have such an edge list, we can then use the table function to turn it into an incidence matrix, which is what igraph needs to turn affiliation data into an igraph object.
+
+```{r}
+classes_matrix <- as.matrix(table(classes_data))
+classes_matrix[, 1:4]
+```
+
+```{r classes-net-biadj-mat-1}
+classes_net <- graph_from_biadjacency_matrix(classes_matrix,
+  mode = c("all")
+)
+plot(classes_net, vertex.label.cex = .6, vertex.label.color = "black")
+```
+
+```{r classes-net-biadj-mat-2}
+V(classes_net)$shape <- ifelse(V(classes_net)$type == FALSE,
+  "circle", "square"
+)
+plot(classes_net, vertex.label.cex = .6, vertex.label.color = "black")
+```
+
+## Unipartite projection
+
+We can make the projection two ways - using the bipartite.projection() function in igraph, or by multiplying the incidence matrix by its transpose (or vise versa).
+
+The mathematical operation to make a person-to-person projection is to multiply the initial matrix by its transpose. 
+
+```{r}
+person_matrix <- classes_matrix %*% t(classes_matrix)
+person_matrix
+```
+
+```{r}
+number_classes_taken <- diag(person_matrix)
+diag(person_matrix) <- 0
+```
+
+```{r person-net-gfam-plot-d}
+person_net <- graph_from_adjacency_matrix(
+  person_matrix,
+  mode = "undirected"
+)
+
+plot(person_net,
+  vertex.size = 8, vertex.label.cex = .8,
+  vertex.label.color = "black"
+)
+```
+
+```{r}
+group_matrix <- t(classes_matrix) %*% classes_matrix
+group_matrix
+```
+
+```{r group-mat-gfam-plot-3}
+number_of_students <- diag(group_matrix)
+
+diag(group_matrix) <- 0
+group_net <- graph_from_adjacency_matrix(group_matrix, mode = "undirected")
+plot(group_net,
+  vertex.size = betweenness(group_net) / max(betweenness(group_net)) * 10,
+  vertex.labesl.cex = .6, vertex.label.color = "black"
+)
+```
+
+## Tripartite analysis
+
+Include other modes or levels, eg. departments and schools. Here departments.
+
+```{r}
+classes <- c(
+  "Biostatistics", "Islamic Civ", "Calc 1",
+  "Linear Algebra", "Chemistry",
+  "The Modern World-System", "Calc 2",
+  "Social Networks", "Exile and Diaspora"
+)
+
+departments <- c(
+  "Math", "History", "Math", "Math",
+  "Chemistry", "Sociology", "Math",
+  "Sociology", "History"
+)
+
+classes_to_departments <- data.frame(
+  class = classes, department = departments, stringsAsFactors = F
+)
+```
+
+```{r}
+classes_to_departments_matrix <- table(classes_to_departments)
+class(classes_to_departments_matrix) <- "matrix"
+
+ctd_table <- table(classes_to_departments)
+classes_to_departments_matrix2 <- matrix(
+  ctd_table,
+  ncol = ncol(ctd_table),
+  dimnames = dimnames(ctd_table)
+)
+```
+
+
+```{r}
+str(classes_to_departments_matrix)
+str(classes_to_departments_matrix2)
+```
+
+
+
+
+
