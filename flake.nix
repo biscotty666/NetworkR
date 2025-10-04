@@ -57,6 +57,7 @@
               egor #
               ergm #
               factoextra #
+              fastnet
               geodata
               ggfortify
               ggnetwork #
