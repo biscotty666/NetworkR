@@ -1,0 +1,594 @@
+---
+title: "Cross-Sectional Network Models: ERGM"
+format: gfm
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+```
+
+ERGMs are useful as they make it possible to uncover what micro tendencies are important in network formation, comparing rates of reciprocity, homophily (for example) net of other network processes. We will offer two main examples, one based on a small school-based network, and one based on a much larger coauthorship network. Both examples are based on cross-sectional network data (so one time point).
+
+# Setup
+
+We will utilize a small school-based network for the first part of the ERGM tutorial. Our main question is what micro-level processes are important for the formation of the network. In particular, we want to explore some of the processes around gender and grade. For example, do boys tend to have more friends than girls? Is gender homophily a strong driver of tie formation? Is gender homophily stronger than grade homophily? How does controlling for other micro tendencies, like reciprocity and transitive closure, change our conclusions?
+
+```{r}
+#| message: false
+
+library(ergm)
+library(sna)
+library(car)
+```
+
+```{r}
+# url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/example_schoolmat.csv"
+
+school_mat <- read.csv("data/example_schoolmat.csv", row.names = 1) |> as.matrix()
+school_mat[1:5, 1:8]
+```
+
+A 1 indicates that person i named person j as a friend.
+
+```{r}
+# url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/example_schooldata.csv"
+
+school_attributes <- read.csv("data/example_schooldata.csv")
+head(school_attributes)
+```
+
+```{r}
+#| warning: false
+
+school_attributes$gender_recode <- recode(school_attributes$gender,
+  as.factor = F,
+  "0 = 'male'; 1 = 'female'"
+)
+```
+
+To construct the network object, first create a list of attributes.
+```{r}
+attribute_list <- do.call(list, school_attributes)
+attribute_list
+```
+
+```{r}
+school_net <- network(school_mat,
+  directed = T,
+  vertex.attr = attribute_list
+)
+school_net
+```
+
+# Descriptive Statistics
+
+```{r plot-school-net-1}
+plot(school_net)
+```
+
+> How do gender and grade shape the formation of network ties
+
+```{r}
+cols <- recode(school_attributes$gender,
+  as.factor = F,
+  "0 = 'blue'; 1 = 'pink'"
+)
+```
+
+```{r plot-school-net-2}
+plot(school_net, vertex.col = cols)
+```
+
+Moderate to low homophily with regard to gender.
+
+```{r plot-school-net-3}
+plot(school_net, vertex.col = school_attributes$grade)
+```
+
+Among grades there are clearer divisions.
+
+```{r}
+outdegree <- degree(school_net, cmode = "outdegree")
+indegree <- degree(school_net, cmode = "indegree")
+```
+
+Do boys or girls have higher degrees.
+
+```{r}
+tapply(indegree, school_attributes$gender_recode, mean)
+```
+
+```{r}
+tapply(outdegree, school_attributes$gender_recode, mean)
+```
+
+Boys recieve and send more ties than girls.
+
+# Conditional Uniform Graph Tests (CUG Tests)
+
+Gather information before running the full model.
+
+We begin by calculating the features of interest, like reciprocity or transitivity. We will then compare the observed statistic with the values that one would see in a random network of the same size (and possibly other constraints). 
+
+> Density
+
+```{r}
+gden(school_net)
+```
+
+Compare to a random network of the same size, randomly forming ties with a probability of .5.
+
+```{r}
+cug.test(dat = school_net, FUN = "gden", cmode = "size")
+```
+
+Clearly the density is less than expected numerically, although it isn't surprising.
+
+Comparing reciprocity. Is the observed rate of reciprocity higher/lower than expected with same size and number of edges.
+
+```{r}
+grecip(school_net, measure = "dyadic.nonnull")
+```
+
+40% of non-null dyads are reciprocated.
+
+```{r}
+cug.test(school_net,
+  FUN = "grecip",
+  FUN.args = list(measure = "dyadic.nonnull"),
+  cmode = "edges"
+)
+```
+
+Reciprocity rate is well above expected, suggesting reciprocity as an important micro-process in the formation of ties. A similar analysis could be done with, eg. transitivity.
+
+# Fitting an ERGM
+
+Predicing existence of ties.
+
+## Edges only
+
+```{r}
+mod_rand <- ergm(formula = school_net ~ edges)
+summary(mod_rand)
+```
+
+The log-odds of any tie existing is -1.946, giving a probability of
+
+```{r}
+exp(-1.946) / (1 + exp(-1.946))
+```
+
+Which is just the density.
+
+
+```{r}
+summary(school_net ~ edges)
+```
+
+## Edges and Homophily
+
+Add nodematch terms for gender and grade.
+
+```{r}
+options(digits = 7)
+mod_homoph1 <- ergm(school_net ~ edges + nodematch("gender_recode") +
+  nodematch("grade"))
+summary(mod_homoph1)
+```
+
+Grade is significant, but gender is not.
+
+The conditional log-odds for a grade match and gender mis-match is
+
+```{r}
+clo <- -2.6140 + (.1137 * 0) + (2.3088 * 1)
+clo
+```
+
+Probability of a tie
+```{r}
+exp(clo) / (1 + exp(clo))
+```
+
+Probability of a tie between nodes that mismatch on both grade and gender
+
+```{r}
+clo <- -2.6140 + (.1137 * 0) + (2.3088 * 0)
+exp(clo) / (1 + exp(clo))
+```
+
+Probability goes down significantly if grades are different. The odds are `exp(2.3088)` = 10.062x higher if nodes match on grade.
+
+## Edges, homophily and node covariates
+
+Compare sending and receiving among boys and girls.
+
+```{r}
+mod_homoph2 <- ergm(
+  school_net ~ edges +
+    nodematch("gender_recode") +
+    nodematch("grade") +
+    nodeifactor("gender_recode") +
+    nodeofactor("gender_recode") +
+    nodeicov("grade") +
+    nodeocov("grade")
+)
+
+summary(mod_homoph2)
+```
+
+Nodecov terms are appropriate for quantitative variables, rather than factors.
+
+Males are more likely to both send and receive nominations, with strong boundaries around age.
+
+
+## Edges, Homophily, Node Covariates, and Reciprocity
+
+Add reciprocity with `mutual` Note that by adding mutual to the model the model will now be fit using MCMC methods. With MCMC estimation, it is often useful to set the input parameters to the estimation routine. 
+
+```{r}
+set.seed(1012)
+
+mod_homoph_mutual1 <- ergm(
+  school_net ~ edges +
+    nodematch("gender_recode") +
+    nodematch("grade") +
+    nodeifactor("gender_recode") +
+    nodeofactor("gender_recode") +
+    nodeicov("grade") +
+    nodeocov("grade") +
+    mutual,
+  control = control.ergm(
+    MCMC.burnin = 50000,
+    MCMC.samplesize = 6000
+  )
+)
+```
+
+
+
+```{r mcmc-diagnostics-mod-homo}
+par(mar = c(2, 2, 2, 2))
+mcmc.diagnostics(mod_homoph_mutual1, vars.per.page = 4)
+```
+
+Everything looks normal
+
+```{r}
+summary(mod_homoph_mutual1)
+```
+
+> interactions
+
+Are mutual ties stronger or weaker between boys and girls.
+
+The model will include two mutual terms, one for boys and one for girls, counting the number of mutual dyads that include at least one boy (or girl). For this initial model, we will not include nodefactor terms for gender. We add those controls below as a means of comparison.
+
+```{r}
+mod_homoph_mutual1b <-
+  ergm(
+    school_net ~ edges +
+      nodematch("gender_recode") +
+      nodematch("grade") +
+      nodeicov("grade") +
+      nodeocov("grade") +
+      mutual(by = "gender_recode"),
+    control = control.ergm(
+      MCMC.burnin = 50000,
+      MCMC.samplesize = 6000
+    )
+  )
+```
+
+```{r}
+summary(mod_homoph_mutual1b)
+```
+
+Boys are more likely to be involved in mutual dyads.
+
+Now, let's go ahead and include a control for degree differences (by gender) in the model. This will allow us to see if boys are more likely to be involved in mutual dyads because they send out more ties or because expectations of reciprocity are higher among boys. 
+
+```{r}
+mod_homoph_mutual1c <-
+  ergm(
+    school_net ~ edges +
+      nodematch("gender_recode") +
+      nodematch("grade") +
+      nodeofactor("gender_recode") +
+      nodeicov("grade") +
+      nodeocov("grade") +
+      mutual(by = "gender_recode"),
+    control = control.ergm(
+      MCMC.burnin = 50000,
+      MCMC.samplesize = 6000
+    )
+  )
+summary(mod_homoph_mutual1c)
+```
+
+Controlling for outgoing messages, boys and girls have similar tendencies to form mutual ties.
+
+# Goodness of fit
+
+Note that this is a goodness of fit test and is different than the MCMC diagnostics viewed above. The MCMC diagnostics only show if the model estimates can be trusted and thus focus on the terms included in the model. Goodness of fit statistics, in contrast, test whether the model can reproduce features of the network not included in the model.
+
+Let's take a quick look at the edgewise shared partner distribution in the observed network:
+
+```{r}
+summary(school_net ~ esp(0:10))
+```
+
+This says that 24 students who are friends have 0 friends in common, 37 have 1 friend in common, and so on. 
+
+The gof() function will simulate a set of networks based on the estimated model; it will then take the generated networks, calculate the macro features of interest (here distance and the shared partner distribution) and compare that to the true value, based on the empirical network. We will also include a model term in the formula. This asks if the model is reproducing the terms included in the model itself (like mutual and homophily on grade). This is a useful check, although not a good test of model fit. We will use the model with the simple specification for mutual (i.e., not allowing the effect to vary by gender).
+
+```{r}
+gof_mod_homoph_mutual1 <-
+  gof(mod_homoph_mutual1,
+    GOF = ~ distance + espartners + model,
+    control = control.gof.ergm(seed = 110)
+  )
+```
+
+```{r gof-mod-homo-mut}
+par(mfrow = c(1, 3))
+plot(gof_mod_homoph_mutual1)
+```
+
+A good model will have the values from the simulated networks close to the true values. Our model is clearly missing something with the shared partners. 
+
+Statistics
+
+```{r}
+gof_mod_homoph_mutual1
+```
+
+> Allow for local clusturing
+
+```{r}
+mod_homoph_mutual2 <-
+  ergm(school_net ~ edges +
+    nodematch("gender_recode") +
+    nodematch("grade", diff = T) +
+    nodeifactor("gender_recode") +
+    nodeofactor("gender_recode") +
+    nodeicov("grade") +
+    nodeocov("grade") +
+    mutual)
+summary(mod_homoph_mutual2)
+```
+
+Grade 12 has the highest in-group bias, with grade 8 having the lowest.
+
+```{r}
+gof_mod_homoph_mutual2 <- gof(mod_homoph_mutual2,
+  GOF = ~ distance + espartners + model,
+  control = control.gof.ergm(seed = 113)
+)
+gof_mod_homoph_mutual2
+```
+
+```{r gof-mod-homo-mutual-2}
+par(mfrow = c(1, 3))
+plot(gof_mod_homoph_mutual2)
+```
+
+No better.
+
+# Adding GWESP to the model
+
+Add a term to the model that will capture the tendency for nodes who are tied to have the same friends. (triadic effects.)
+
+Geometrically weighted edge-wise shared partner: weighted count of distribution of shared partners. If there is local clustering, expect tied nodes to have many friends in common. A decay parameter determines how much weight is placed on multiple shared partners.
+
+```{r}
+mod_homoph_mutual_gwesp2 <- ergm(
+  school_net ~ edges +
+    nodematch("gender_recode") +
+    nodematch("grade") +
+    nodeifactor("gender_recode") +
+    nodeofactor("gender_recode") +
+    nodeicov("grade") + nodeocov("grade") +
+    mutual + gwesp(decay = .5, fixed = T),
+  control = control.ergm(
+    MCMC.burnin = 50000,
+    MCMC.samplesize = 7000,
+    parallel = 2,
+    parallel.type = "PSOCK"
+  )
+)
+```
+
+This didn't work
+
+```{r mcmc-diag-mod-homo-gwesp2-1}
+par(margin = c(0, 0, 0, 0))
+mcmc.diagnostics(mod_homoph_mutual_gwesp2,
+  vars.per.page = 3,
+  compact = T
+)
+```
+
+```{r}
+summary(mod_homoph_mutual_gwesp2)
+```
+
+```{r}
+gof_mod_homoph_mutual_gwesp2 <- gof(
+  mod_homoph_mutual_gwesp2,
+  GOF = ~ distance + espartners + model,
+  control = control.gof.ergm(seed = 108)
+)
+```
+
+```{r gof-mod-homo-gwesp2-plot}
+par(mfrow = c(1, 3))
+plot(gof_mod_homoph_mutual_gwesp2)
+```
+
+Significant improvement
+
+## Simulate network
+
+```{r}
+sim_schoolnet <- simulate(mod_homoph_mutual_gwesp2,
+  nsim = 1, seed = 1012,
+  control = control.simulate.ergm(MCMC.burnin = 100000)
+)
+```
+
+```{r plot-school-net-ts-3}
+par(mfrow = c(1, 2))
+plot(school_net, vertex.col = "grade", main = "True Network")
+plot(sim_schoolnet, vertex.col = "grade", main = "Simulated Network")
+```
+
+# Simulation
+
+What if?
+
+What would happen to the network structure if we altered the strength of homophily? Consider 2 networks with size and density like the school network, but different degrees of grade homophily.
+
+1. Set basic features
+2. Estimate ERGM coefficients
+3. Use coefficients to generate network
+
+```{r}
+net <- network.initialize(n = 32, directed = T)
+net %v% "grade" <- get.vertex.attribute(school_net, "grade")
+```
+
+```{r}
+summary(school_net ~ edges + nodematch("grade"))
+```
+
+We will define strong homophily as a network with 75% of edges matching on grade, and weak homophily as a network with 25% of edges matching on grade. 
+
+```{r}
+mod_stronghomophily <- ergm(net ~ edges + nodematch("grade"),
+  target.stats = c(124, 93)
+) # 93 out of 124 or 75%
+mod_stronghomophily
+```
+
+```{r}
+mod_weakhomophily <- ergm(net ~ edges + nodematch("grade"),
+  target.stats = c(124, 31)
+)
+```
+
+```{r}
+sim_strong_homophily <- simulate(mod_stronghomophily, seed = 1006)
+summary(sim_strong_homophily ~ edges + nodematch("grade"))
+```
+
+```{r}
+sim_weak_homophily <- simulate(mod_weakhomophily, seed = 1006)
+summary(sim_weak_homophily ~ edges + nodematch("grade"))
+```
+
+```{r plot-sim-weak-strong}
+par(mfrow = c(1, 2))
+plot(sim_weak_homophily, vertex.col = "grade", main = "Weak Homophily")
+plot(sim_strong_homophily, vertex.col = "grade", main = "Strong Homophily")
+```
+
+> transitivity
+
+```{r}
+gtrans(sim_weak_homophily)
+gtrans(sim_strong_homophily)
+```
+
+In strong homophily, the friend of a friend is more likely to be a friend.
+
+# Large Network Example
+
+We now turn to an example on a much larger network than the school network used above. In this case, we model a coauthorship network with 60098 nodes. The actors (or nodes) are sociologists who published at least one paper. Two actors are tied together if they coauthored a paper together. The network is undirected. A network of this size creates practical issues for statistical models and we will consider how a researcher can navigate such difficulties.
+
+```{r}
+# url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/coauthorship_edgelist.txt"
+
+coauthor_edgelist <- read.table("data/coauthorship_edgelist.txt", 
+                                header = T)
+head(coauthor_edgelist)
+```
+
+```{r}
+# url4 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/coauthorship_attributes.txt"
+
+coauthor_attributes <- read.table("data/coauthorship_attributes.txt",
+                                  header = T)
+head(coauthor_attributes)
+```
+
+We will focus on two key attributes: 
+- prestige:
+  - 0 = never published in high prestige journals
+  - 1 = has published in high prestige journal
+- research_type:
+  - 0 = primarily a qualitative scholar
+  - 1 = primarily a quantitative scholar
+  - 2 = primarily uses mixed methods
+
+```{r}
+coauthor_attributes$prestige <- recode(
+  coauthor_attributes$prestige,
+  as.factor = F,
+  "0 = 'low prestige';
+  1 = 'high prestige'")
+
+coauthor_attributes$research_type <- recode(
+  coauthor_attributes$research_type,
+  as.factor = F,
+  "0 = 'qualitative';
+  1 = 'quantitative';
+  2 = 'mixed'")
+```
+
+```{r}
+coauthorship_net <- network(
+  x = coauthor_edgelist, directed = F,
+  vertices = coauthor_attributes)
+coauthorship_net
+```
+
+Given the size of the network, it will be difficult to run certain models using the ergm package. In particular, dyadic dependent models (i.e., models that include terms like gwesp, where the ij tie is dependent on the presence/absence of other ties) pose difficult computational challenges. 
+
+Here, we will focus on the simpler case, where we only try to estimate a dyadic independent model, focusing on homophily and node-level factors. Substantively, we will focus on the social divisions that exist in coauthorship in terms of prestige and type of research (quantitative/qualitative/mixed). For example, do 'high prestige' scholars tend to coauthor with other 'high prestige’ scholars?
+
+We start with a model that looks at homophily for prestige and research type. 
+
+```{r}
+mod1 <- ergm(coauthorship_net ~ edges +
+               nodematch("research_type") +
+               nodematch("prestige"))
+summary(mod1)
+```
+
+There is strong homophily, especially in research type, where the odds of a tie forming is nearly 4 times higher if the research type is the same (controlling for prestige match):
+
+```{r}
+exp(1.37918)
+```
+
+To see the homophily across categories
+
+```{r}
+mod2 <- ergm(coauthorship_net ~ edges +
+               nodematch("research_type") +
+               nodematch("prestige") +
+               nodefactor("research_type") +
+               nodefactor("prestige"))
+mod2
+```
+The results suggest, as before, that high prestige researcher tend to coauthor with high prestige researchers, while researchers tend to coauthor with others doing similar kinds of research. This time, however, we see that the coefficient on nodematch for prestige is higher than seen in model 1, where we did not control for the degree differences across categories. Model 2 makes clear that those with high prestige tend to coauthor more than those with lower prestige (see negative coefficient on nodefactor.prestige.low prestige). Controlling for these differences in degree, the tendency for researchers to coauthor with researchers of similar prestige appears to be amplified, although we would want to explore this more formally (i.e., by using probabilities to look at the marginal effect of homophily on prestige across the two models).
+
+Instead of running the computations on the entire network, can sample instead.
+
+```{r}
+library(ergm.ego)
+```
+

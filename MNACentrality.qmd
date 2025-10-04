@@ -1,0 +1,391 @@
+---
+title: "Centrality"
+format: gfm
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+```
+
+Centrality measures:
+
+- degree
+- betweenness
+- closeness
+- eigenvector
+
+# Preparation
+
+```{r}
+#| message: false
+library(igraph)
+library(tidyverse)
+library(reshape2)
+```
+
+We will use John Padgett’s Florentine Families dataset. It is part of a famous historical datset about the relationships of prominent Florentine families in 15th century Italy. The historical puzzle is how the Medici, an upstart family, managed to accumulate political power during this period. Padgett’s goal was to explain their rise.
+
+```{r}
+# https://raw.githubusercontent.com/mahoffman/stanford_networks/main/data/florentine_marriage_edgelist.csv
+florentine_edj <- read.csv("data/florentine_marriage_edgelist.csv")
+florentine_edj <- florentine_edj[, 2:3]
+head(florentine_edj)
+```
+
+```{r}
+# https://raw.githubusercontent.com/mahoffman/stanford_networks/main/data/florentine_attributes.csv
+florentine_attributes <- read.csv("data/florentine_attributes.csv")
+str(florentine_attributes)
+```
+
+```{r}
+# graph the marriage network
+marriageNet <- graph_from_edgelist(as.matrix(florentine_edj), directed = T)
+V(marriageNet)$Wealth <-
+  florentine_attributes$Gwealth[match(
+    V(marriageNet)$name,
+    florentine_attributes$Family
+  )]
+summary(V(marriageNet)$Wealth)
+```
+
+Simple mean imputation of wealth
+
+```{r}
+V(marriageNet)$Wealth <- ifelse(
+  is.na(V(marriageNet)$Wealth),
+  mean(V(marriageNet)$Wealth, na.rm = T),
+  V(marriageNet)$Wealth
+)
+```
+
+
+Number of Priors, The Priorate (or city council), first created in 1282, was Florence's governing body. Count of how many seats a family had on that city council from 1282-1344
+(measure of the aggregate political influence of the family over a long period of time)
+```{r}
+V(marriageNet)$Priorates <-
+  florentine_attributes$Npriors[match(
+    V(marriageNet)$name,
+    florentine_attributes$Family
+  )]
+```
+
+```{r marriagenet-centrality-mna-1}
+plot(marriageNet,
+  vertex.size = 8, vertex.label.cex = .6,
+  vertex.label.color = "black", vertex.color = "pink",
+  edge.arrow.size = 0.4
+)
+```
+
+# Degree Centrality
+
+> Note: In a directed network, you will need to specify if in or out ties should be counted. These will be referred to as in or out degree respectively. If both are counted, then it is just called degree
+
+```{r}
+degree(marriageNet)
+```
+
+```{r marriagenet-centrality-mna-18}
+V(marriageNet)$degree <- degree(marriageNet)
+
+plot(marriageNet,
+  vertex.label.cex = .6,
+  vertex.label.color = "black",
+  vertex.size = V(marriageNet)$degree
+)
+```
+
+```{r marriagenet-centrality-mna-2}
+plot(marriageNet,
+  vertex.label.cex = .6,
+  vertex.label.color = "black",
+  vertex.size = V(marriageNet)$degree * 3
+)
+```
+
+# Betweenness Centrality
+
+```{r}
+betweenness(marriageNet, directed = F)
+```
+
+```{r marriagenet-centrality-mna-3}
+V(marriageNet)$betweenness <- betweenness(marriageNet, directed = F)
+
+plot(marriageNet,
+  vertex.label.cex = .6,
+  vertex.label.color = "black",
+  vertex.size = V(marriageNet)$betweenness
+)
+```
+
+Normalize
+
+```{r marriagenet-centrality-mna-4}
+plot(marriageNet,
+  vertex.label.cex = .6,
+  vertex.label.color = "black",
+  vertex.size = V(marriageNet)$betweenness / max(V(marriageNet)$betweenness) * 20
+)
+```
+
+# Closeness Centrality
+
+```{r}
+closeness(marriageNet)
+```
+
+```{r marriagenet-centrality-mna-5}
+V(marriageNet)$closeness <- closeness(marriageNet)
+
+plot(marriageNet,
+  vertex.label.cex = .6,
+  vertex.label.color = "black",
+  vertex.size = V(marriageNet)$closeness / max(V(marriageNet)$closeness) * 50
+)
+```
+
+# Eigenvector Centrality
+
+Takes into account alters' power. Eg, if A and B have the same degree centrality, but A is tied to high degree people and B is tied to low degree people, A should have a higher score than b.
+
+Eigenvector centrality takes into account alters’ power. It is calculated a little bit differently in igraph. It produces a list object and we need to extract only the vector of centrality values.
+
+```{r}
+evcent(marriageNet)$vector
+```
+
+```{r marriagenet-centrality-mna-6}
+V(marriageNet)$eigenvector <- evcent(marriageNet)$vector
+
+plot(marriageNet,
+  vertex.label.cex = .6,
+  vertex.label.color = "black",
+  vertex.size = V(marriageNet)$eigenvector / max(V(marriageNet)$eigenvector) * 20
+)
+```
+
+# Bonacich Centrality
+
+Interpretively, the Bonacich power measure corresponds to the notion that the power of a vertex is recursively defined by the sum of the power of its alters. The nature of the recursion involved is then controlled by the power exponent: positive values imply that vertices become more powerful as their alters become more powerful (as occurs in cooperative relations), while negative values imply that vertices become more powerful only as their alters become weaker (as occurs in competitive or antagonistic relations). The magnitude of the exponent indicates the tendency of the effect to decay across long walks; higher magnitudes imply slower decay. One interesting feature of this measure is its relative instability to changes in exponent magnitude (particularly in the negative case). If your theory motivates use of this measure, you should be very careful to choose a decay parameter on a non-ad hoc basis.
+
+For directed networks, the Bonacich power measure can be understood as similar to status in the network where higher status nodes have more edges that point from them to others with status. Node A's centrality depends on the centrality of all the nodes that A points toward, and their centrality depends on the nodes they point toward, etc. Note, this means that a node with an out-degree of 0 will have a Bonacich power centrality of 0 as they do not point towards anyone. When using this with directed network it is important to think about the edge direction and what it represents.
+
+```{r marriagenet-centrality-mna-7}
+V(marriageNet)$bonacich <-
+  power_centrality(marriageNet, exponent = -2, rescale = T)
+V(marriageNet)$bonacich <-
+  ifelse(V(marriageNet)$bonacich < 0, 0, V(marriageNet)$bonacich)
+
+plot(marriageNet,
+  vertex.label.cex = .6,
+  vertex.label.color = "black",
+  vertex.size =
+    V(marriageNet)$bonacich / max(V(marriageNet)$bonacich) * 20
+)
+```
+
+# Page Rank
+
+Google's page rank measure, uses random walks to identify individuals who are commonly encountered.
+
+```{r}
+V(marriageNet)$page_rank <-
+  page_rank(marriageNet, directed = T)$vector
+```
+
+
+```{r marriagenet-centrality-mna-8}
+plot(marriageNet,
+  vertex.label.cex = .6,
+  vertex.label.color = "black",
+  vertex.size =
+    V(marriageNet)$page_rank / max(V(marriageNet)$page_rank) * 20
+)
+```
+
+# Measure Correlations
+
+```{r}
+all_atts <- lapply(
+  vertex_attr_names(marriageNet),
+  function(x) vertex_attr(marriageNet, x)
+)
+
+all_atts <- do.call("cbind", all_atts)
+```
+
+
+```{r marriagenet-centrality-mna-9}
+all_atts <- lapply(
+  vertex_attr_names(marriageNet),
+  function(x) vertex_attr(marriageNet, x)
+) %>%
+  do.call("cbind", .)
+
+colnames(all_atts) <- vertex_attr_names(marriageNet)
+
+all_atts <- data.frame(all_atts[, 2:ncol(all_atts)]) %>%
+  sapply(as.numeric)
+
+cor_mat <- cor(all_atts)
+
+# melt it using reshape to function melt() to prepare it for ggplot which requires long form data
+melted_cor_mat <- melt(cor_mat)
+ggplot(data = melted_cor_mat, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_distiller(palette = "Spectral", direction = -2) +
+  xlab("") +
+  ylab("")
+```
+
+# Centralization and Degree Distributions
+
+Fit a degree distribution on the log-log scale
+
+```{r marriagenet-centrality-mna-10}
+alter_hist <- table(degree(marriageNet))
+vals <- as.numeric(names(alter_hist))
+vals <- vals[2:length(vals)]
+alter_hist <- alter_hist[2:length(alter_hist)]
+df <- data.frame(
+  Vals = log(vals),
+  Hist = log(as.numeric(alter_hist)),
+  stringsAsFactors = F
+)
+
+plot(Hist ~ Vals, data = df)
+abline(lm(Hist ~ Vals, data = df))
+```
+
+Compare ego's partners with neighbor's partners
+
+```{r}
+neighbor_degrees <- knn(marriageNet)$knn
+degrees <- degree(marriageNet)
+
+mean(neighbor_degrees, na.rm = T)
+mean(degrees)
+```
+
+```{r marriagenet-centrality-mna-11}
+hist(neighbor_degrees)
+```
+
+```{r marriagenet-centrality-mna-12}
+hist(degrees)
+```
+
+Finally centralization measures the extent to which a network is centered around a single node. The closer a network gets to looking like a star, the higher the centralization score will be.
+
+```{r}
+centr_betw(marriageNet)$centralization
+```
+
+```{r}
+centr_eigen(marriageNet)$centralization
+```
+
+```{r}
+centr_clo(marriageNet)$centralization
+```
+
+Note that this is significantly different from the text.
+
+Compaire with a Barabasi-Albert simulated model with preferential attachment with respect to degree (power parameter).
+
+```{r}
+N <- vcount(marriageNet)
+deg_cent <- centr_degree(marriageNet)$centralization
+
+# centralizations = c()
+powers <- seq(0, 3, .1)
+
+# for (e in powers) {
+#  net <- sample_pa(N, directed = F, power = e)
+#  centralizations <- c(centralizations, centr_degree(net)$centralization)
+# }
+
+cents <- function(powers) {
+  net <- sample_pa(N, directed = F, power = powers)
+  centr_degree(net)$centralization
+}
+
+centralizations <- map(powers, cents) %>% list_c()
+centralizations
+```
+
+```{r marriagenet-centrality-mna-13}
+power_df <- data.frame(
+  Centralization = centralizations,
+  Power = powers
+)
+
+ggplot(power_df, aes(x = Power, y = Centralization)) +
+  geom_point() +
+  geom_hline(yintercept = deg_cent, linetype = "dashed", color = "red") +
+  theme_bw()
+```
+
+What proportion of nodes can any node reach at N steps?
+
+```{r marriagenet-centrality-mna-14}
+reach_n <- function(x, n = 2) {
+  r <- vector(length = vcount(x))
+  for (i in 1:vcount(x)) {
+    neighb <- neighborhood(x, n, nodes = i)
+    ni <- unlist(neighb)
+    l <- length(ni)
+    r[i] <- (l) / vcount(x)
+  }
+  return(r)
+}
+
+two_reach <- reach_n(marriageNet, 2)
+
+plot(marriageNet,
+  vertex.size = two_reach * 10,
+  vertex.label.cex = .4, vertex.label.color = "black"
+)
+```
+
+```{r marriagenet-centrality-mna-15}
+three_reach <- reach_n(marriageNet, 3)
+plot(marriageNet,
+  vertex.size = three_reach * 10,
+  vertex.label.cex = .4, vertex.label.color = "black",
+  vertex.color = "tomato"
+)
+```
+
+```{r marriagenet-centrality-mna-16}
+five_reach <- reach_n(marriageNet, 5)
+
+plot(marriageNet, vertex.size = five_reach * 10, vertex.label.cex = .4, vertex.label.color = "black", vertex.color = "tomato")
+```
+
+# Distance weighted reach
+
+```{r marriagenet-centrality-mna-17}
+distance_weighted_reach <- function(x) {
+  distances <- distances(x) # create matrix of geodesic distances
+  diag(distances) <- 1 # replace the diagonal with 1s
+  weights <- 1 / distances # take the reciprocal of distances
+  return(apply(weights, 1, sum)) # sum for each node (row)
+}
+
+dw_reach <- distance_weighted_reach(marriageNet)
+dw_reach <- dw_reach / max(dw_reach)
+
+plot(marriageNet, vertex.size = dw_reach * 10, vertex.label.cex = .4, vertex.label.color = "black", vertex.color = "tomato")
+```
+
+
+
+
+
+
+
+
+
