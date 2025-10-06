@@ -1,0 +1,246 @@
+---
+title: "GSS Network - Dyads and Triads"
+format: gfm
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+```
+
+# Preparation
+
+```{r}
+# url1 <- "https://raw.githubusercontent.com/mahoffman/stanford_networks/main/data/comm59.dat.txt"
+
+el <- read.table("../data/comm59.dat.txt", header = T)
+
+# url2 <- "https://raw.githubusercontent.com/mahoffman/stanford_networks/main/data/comm59_att.dat.txt"
+
+attributes <- read.table("../data/comm59_att.dat.txt", header = T)
+
+# add an ID column
+attributes$ID <- 1:nrow(attributes)
+```
+
+```{r}
+#| message: false
+library(igraph)
+library(tidyverse)
+```
+
+
+```{r}
+head(el)
+```
+
+```{r}
+el_no_weight <- el %>%
+  select(-rank) %>%
+  mutate(across(where(is.numeric), as.character)) %>%
+  as.matrix()
+
+net59 <- graph_from_edgelist(el_no_weight,
+  directed = T
+)
+```
+
+```{r}
+# First link vertex names to their place in the attribute dataset
+linked_ids <- match(V(net59)$name, attributes$ID)
+
+V(net59)$race <- attributes$race[linked_ids]
+V(net59)$sex <- attributes$sex[linked_ids]
+V(net59)$grade <- attributes$grade[linked_ids]
+V(net59)$school <- attributes$school[linked_ids]
+
+net59
+```
+
+# The Dyad
+
+```{r}
+edge_density(net59)
+reciprocity(net59)
+```
+
+```{r}
+random_graph <- sample_gnp(
+  n = vcount(net59), p = edge_density(net59), directed = T
+)
+```
+
+```{r random-graph-net59-1}
+plot(random_graph,
+  vertex.size = 2,
+  vertex.label = NA,
+  edge.curved = .1,
+  vertex.color = "tomato",
+  edge.arrow.size = .1,
+  edge.width = .5,
+  edge.color = "grey60"
+)
+```
+
+```{r}
+edge_density(net59)
+reciprocity(net59)
+edge_density(random_graph)
+reciprocity(random_graph)
+```
+
+The reciprocity is much higher than expected.
+
+```{r random-graph-net59-recip-1}
+plot(net59,
+  vertex.size = 2,
+  vertex.label = NA,
+  edge.curved = .1,
+  vertex.color = "tomato",
+  edge.arrow.size = .1,
+  edge.width = .5,
+  edge.color = "grey60"
+)
+```
+
+# The Triad
+
+```{r}
+triad_census(net59)
+triad_census(random_graph)
+```
+
+Triads are common in the observed network but not in the random graph.
+
+# Distribution of random graphs
+
+```{r}
+trial <- vector("list", 100)
+
+for (i in 1:length(trial)) {
+  trial[[i]] <- sample_gnp(
+    n = vcount(net59), p = edge_density(net59), directed = T
+  ) %>%
+    triad_census()
+}
+
+trial_df <- do.call("rbind", trial)
+
+colnames(trial_df) <- c("003", "012", "102", "021D", "021U", "021C", "111D", "111U", "030T", "030C", "201", "120D", "120U", "120C", "210", "300")
+
+
+trial_df_w_observed <- rbind(trial_df, as.numeric(triad_census(net59)))
+```
+
+```{r}
+head(trial_df_w_observed)
+```
+
+Let’s produce, for each column, some simple statistics, like a mean and a confidence interval. First, standardize all of the columns by dividing each of their values by the largest value in that column, so that each will be on a similar scale (0 to 1), we can visualize them meaningfully 
+
+```{r}
+trial_df_w_observed <- as.data.frame(trial_df_w_observed)
+
+trial_df_w_observed[, 1:ncol(trial_df_w_observed)] <- sapply(
+  trial_df_w_observed[, 1:length(trial_df_w_observed)],
+  function(x) x / max(x)
+)
+
+trial_df <- as.data.frame(trial_df_w_observed[1:100, ])
+observed <- as.numeric(trial_df_w_observed[101, ])
+```
+
+```{r}
+summarized_stats <- data.frame(
+  TriadType = colnames(trial_df),
+  Means = sapply(trial_df, mean),
+  LowerCI = sapply(trial_df, function(x) quantile(x, 0.05)),
+  UpperCI = sapply(trial_df, function(x) quantile(x, 0.95)),
+  Observed = observed
+)
+summarized_stats
+```
+
+```{r mna-dyadtriad-plot-1}
+library(ggplot2)
+ggplot(summarized_stats) +
+  geom_path(aes(x = TriadType, y = Means, color = TriadType)) +
+  geom_errorbar(aes(
+    x = TriadType, ymin = LowerCI, ymax = UpperCI,
+    color = TriadType
+  ), width = .1) +
+  geom_point(aes(x = TriadType, y = Observed, color = "Observed")) +
+  coord_flip()
+```
+
+# Banning Triads
+
+```{r}
+# A basic function which prevents the formation of specified triads in a random graph simulation
+banning_triads_game <- function(n = 100, porm = .05,
+                                banned = c(2), sim_max = 1000000,
+                                probrecip = .5) {
+  if (any(c(1) %in% banned)) {
+    stop("Can't ban 003s") # Stops the simulation if the user tried to ban 003 triads
+  }
+
+  num_edges <- round(n * (n - 1) * porm, 2) # calculates the desired number of edges according to the N and Porm parameters
+
+  net <- make_empty_graph(n = n, directed = TRUE) # initializes an empty network
+
+  edge_count <- 0
+  sim_count <- 0
+
+  while (edge_count < num_edges) {
+    # This part samples two nodes, checks whether the two sampled nodes are the same node, and whether an edge is already present in the network between these nodes
+
+    uniq <- TRUE
+    edge_present <- TRUE
+    while (uniq == TRUE | edge_present == TRUE) {
+      edge_id <- sample(1:n, 2, replace = T)
+      uniq <- edge_id[1] == edge_id[2]
+      reciprocated <- sample(c(FALSE, TRUE), 1, prob = c(1 - probrecip, probrecip))
+      edge_present_1 <- are_adjacent(net, edge_id[1], edge_id[2])
+      if (reciprocated) {
+        edge_present_2 <- are_adjacent(net, edge_id[2], edge_id[1])
+        edge_present <- edge_present_1 | edge_present_2
+      } else {
+        edge_present <- edge_present_1
+      }
+    }
+
+    # Calculates the traid census for the network before adding an edge
+    before <- triad.census(net)
+    net_new <- net + edge(edge_id) # Adds in the edge
+    if (reciprocated) {
+      edge_id_rev <- edge_id[2:1]
+      net_new <- net_new + edge(edge_id_rev) # Adds in the edge
+    }
+    after <- triad.census(net_new) # Calculates the triad census again
+    triad_diff <- after - before # Checks to see how much the triad census changed
+
+    if (all(triad_diff[banned] == 0)) {
+      net <- net_new # If the banned triads still aren't observed, then the new network is accepted.
+    }
+
+    edge_count <- ecount(net) # number of edges updated
+    sim_count <- sim_count + 1 # Simulation count updated
+    if (sim_count > sim_max) {
+      print("Warning: Failed to converge, banned triads may be incompatible") # exits simulation if simulation max count is exceeded
+      return(net)
+    }
+  }
+  return(net) # Returns the simulated network
+}
+```
+
+```{r}
+no_cycles <- banning_triads_game(banned = c(4, 5, 7))
+triad_census(no_cycles)
+```
+
+```{r mna-dyadtriad-plot-2}
+plot(no_cycles,
+  vertex.size = 2, vertex.label = NA,
+  vertex.color = "tomato", edge.arrow.size = .2
+)
+```
