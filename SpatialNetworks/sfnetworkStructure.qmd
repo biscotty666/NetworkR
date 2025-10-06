@@ -1,0 +1,284 @@
+---
+title: "The sfnetwork data structure"
+format: gfm
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+```
+
+```{r}
+#| message: false
+library(sfnetworks)
+library(sf)
+library(tidygraph)
+library(igraph)
+library(ggplot2)
+```
+
+# Construction
+
+A sfnetwork should have a valid spatial network structure. For the nodes, this currently means that their geometries should all be of type POINT. In the case of spatially explicit edges, edge geometries should all be of type LINESTRING, nodes and edges should have the same CRS and endpoints of edges should match their corresponding node coordinates.
+
+```{r}
+p1 <- st_point(c(7, 51))
+p2 <- st_point(c(7, 52))
+p3 <- st_point(c(8, 52))
+p4 <- st_point(c(8, 51.5))
+
+l1 <- st_sfc(st_linestring(c(p1, p2)))
+l2 <- st_sfc(st_linestring(c(p1, p4, p3)))
+l3 <- st_sfc(st_linestring(c(p3, p2)))
+
+edges <- st_as_sf(c(l1, l2, l3), crs = 4326)
+nodes <- st_as_sf(c(st_sfc(p1), st_sfc(p2), st_sfc(p3)), crs = 4326)
+
+edges$from <- c(1, 1, 3)
+edges$to <- c(2, 3, 2)
+
+net <- sfnetwork(nodes, edges)
+net
+```
+
+```{r}
+class(net)
+```
+
+By default, the created network is a directed network. If you want to create an undirected network, set directed = FALSE. Note that for undirected networks, the indices in the from and to columns are re-arranged such that the from index is always smaller than (or equal to, for loop edges) the to index. However, the linestring geometries remain unchanged. That means that in undirected networks it can happen that for some edges the from index refers to the last point of the edge linestring, and the to index to the first point. The behavior of ordering the indices comes from igraph and might be confusing, but remember that in undirected networks the terms from and to do not have a meaning and can thus be used interchangeably.
+
+```{r}
+net <- sfnetwork(nodes, edges, directed = F)
+net
+```
+
+Instead of from and to columns containing integers that refer to node indices, the provided edges table can also have from and to columns containing characters that refer to node keys. In that case, you should tell the construction function which column in the nodes table contains these keys. Internally, they will then be converted to integer indices.
+
+```{r}
+nodes$name <- c("city", "village", "farm")
+edges$from <- c("city", "city", "farm")
+edges$to <- c("village", "farm", "village")
+edges
+```
+
+```{r}
+net <- sfnetwork(nodes, edges, node_key = "name")
+net
+```
+
+If your edges table does not have linestring geometries, but only references to node indices or keys, you can tell the construction function to create the linestring geometries during construction. This will draw a straight line between the endpoints of each edge.
+
+```{r sfnetwork-structure-plot-1}
+st_geometry(edges) <- NULL
+
+other_net <- sfnetwork(nodes, edges, edges_as_lines = TRUE)
+par(mfrow = c(1, 2))
+plot(net, cex = 2, lwd = 2, main = "Original geometries")
+plot(other_net, cex = 2, lwd = 2, main = "Straight Lines")
+```
+
+```{r}
+net
+```
+
+# From an sf object with linestring geometries
+
+Edges from the linestrings, nodes at endpoints, shared endpoints become a single node.
+
+```{r}
+roxel
+```
+
+```{r sfnetwork-structure-plot-2}
+par(mar = c(0, 0, 0, 0))
+net <- as_sfnetwork(roxel)
+plot(net)
+```
+
+# Activation
+
+Removing nodes will result in the elimination of edges termitating at the nodes. Removing edges will not remove nodes.
+
+```{r}
+net %>%
+  activate("edges") %>%
+  mutate(weight = edge_length()) %>%
+  activate("nodes") %>%
+  mutate(bc = centrality_betweenness(weights = weight, directed = FALSE))
+```
+
+# Extraction
+
+Neither all sf functions nor all tidyverse verbs can be directly applied to a sfnetwork as described above. That is because there is a clear limitation in the relational data structure that requires rows to maintain their identity. Hence, a verb like dplyr::summarise() has no clear application for a network. For sf functions, this means also that the valid spatial network structure should be maintained. That is, functions that summarise geometries of an sf object, or (may) change their type, shape or position, are not supported directly. These are for example most of the geometric unary operations.
+
+These functions cannot be directly applied to a sfnetwork, but no need to panic! The active element of the network can at any time be extracted with sf::st_as_sf() (or tibble::as_tibble()). This allows you to continue a specific part of your analysis outside of the network structure, using a regular sf object. Afterwards you could join inferred information back into the network. See the vignette about spatial joins for more details.
+
+```{r}
+net %>%
+  activate("nodes") %>%
+  st_as_sf()
+```
+
+or:
+
+```{r}
+st_as_sf(net, "edges")
+```
+
+# Visualization
+
+```{r sfnetwork-structure-plot-3}
+par(mar = c(0, 0, 0, 0))
+plot(net)
+```
+
+```{r sfnetwork-structure-plot-4}
+autoplot(net) +
+  ggtitle("Road network of Münster Roxel")
+```
+
+Using `geom_sf` by extracting nodes and edges.
+
+```{r sfnetwork-structure-plot-5}
+net <- net %>%
+  activate("nodes") %>%
+  mutate(bc = centrality_betweenness())
+
+ggplot() +
+  geom_sf(data = st_as_sf(net, "edges"), col = "grey50") +
+  geom_sf(data = st_as_sf(net, "nodes"), aes(col = bc, size = bc)) +
+  ggtitle("Betweenness centrality in Münster Roxel")
+```
+
+# Geometries
+
+The geometry of the active element can be extracted with `st_geometry`. Replacing the geometry with NULL removes geometry. Removing geometries from edges retains the spatial structure of nodes. Removing node geometries results in loss of spatial structure.
+
+```{r}
+net %>%
+  activate("nodes") %>%
+  st_geometry()
+```
+
+```{r sfnetwork-structure-plot-6}
+par(mar = c(.4, .4, .4, .4))
+net %>%
+  activate("edges") %>%
+  st_set_geometry(NULL) %>%
+  plot(draw_lines = FALSE, main = "Edges without geometries")
+```
+
+```{r sfnetwork-structure-plot-7}
+par(mar = c(.5, .5, .5, .5))
+net %>%
+  activate("nodes") %>%
+  st_set_geometry(NULL) %>%
+  plot(vertex.color = "black", main = "Nodes without geometries")
+```
+
+When calling sf::st_reverse() on the edges of a directed network, not only the geometries will be reversed, but the from and to columns of the edges will be swapped as well. In the case of undirected networks these columns remain unchanged, since the terms from and to don’t have a meaning in undirected networks and can be used interchangeably. 
+
+```{r}
+as_sfnetwork(roxel, directed = TRUE) %>%
+  activate("edges") %>%
+  st_reverse()
+```
+
+# Coordinates
+
+The coordinates of the active element of a sfnetwork can be extracted with the sf function sf::st_coordinates(), or from any element by specifying the element of interest as additional argument, e.g. sf::st_coordinate(net, "edges")
+
+```{r}
+node_coords <- net %>%
+  activate("nodes") %>%
+  st_coordinates()
+node_coords[1:4, ]
+```
+
+Besides X and Y coordinates, the features in the network can possibly also have Z and M coordinates.
+
+```{r}
+st_z_range(net)
+st_m_range(net)
+```
+
+Add Z coordinates with value 0 to all features.
+
+```{r}
+st_zm(net, drop = F, what = "Z")
+```
+
+Coordinate queries
+
+```{r}
+net %>%
+  st_zm(drop = F, what = "Z") %>%
+  mutate(
+    X = node_X(), Y = node_Y(),
+    Z = node_Z(), M = node_M()
+  )
+```
+
+# Precision
+
+The precision in a valid spatial network structure is always the same for nodes and edges.
+
+```{r}
+st_precision(net)
+net %>%
+  st_set_precision(1) %>%
+  st_precision()
+```
+
+# Bounding Box
+
+The bounding boxes of the nodes and edges are not necessarily the same. Therefore, sfnetworks adds the st_network_bbox() function to retrieve the combined bounding box of the nodes and edges. In this combined bounding box, the most extreme coordinates of the two individual element bounding boxes are preserved. Hence, the xmin value of the network bounding box is the smallest xmin value of the node and edge bounding boxes, et cetera.
+
+```{r}
+net %>%
+  activate("nodes") %>%
+  st_bbox()
+```
+
+```{r}
+node1 <- st_point(c(8, 51))
+node2 <- st_point(c(7, 51.5))
+node3 <- st_point(c(8, 52))
+node4 <- st_point(c(9, 51))
+edge1 <- st_sfc(st_linestring(c(node1, node2, node3)))
+
+nodes <- st_as_sf(c(st_sfc(node1), st_sfc(node3), st_sfc(node4)))
+edges <- st_as_sf(edge1)
+edges$from <- 1
+edges$to <- 2
+
+small_net <- sfnetwork(nodes, edges)
+```
+
+```{r}
+node_bbox <- st_as_sfc(st_bbox(activate(small_net, "nodes")))
+edge_bbox <- st_as_sfc(st_bbox(activate(small_net, "edges")))
+net_bbox <- st_as_sfc(st_network_bbox(small_net))
+```
+
+```{r sfnetwork-structure-plot-8}
+par(mfrow = c(2, 1), mar = c(.5, .5, .5, .5))
+plot(small_net, lwd = 2, cex = 4, main = "Element bounding boxes")
+plot(node_bbox, border = "red", lty = 2, lwd = 4, add = TRUE)
+plot(edge_bbox, border = "blue", lty = 2, lwd = 4, add = TRUE)
+plot(small_net, lwd = 2, cex = 4, main = "Network bounding box")
+plot(net_bbox, border = "red", lty = 2, lwd = 4, add = TRUE)
+```
+
+# Attrubute-geometry relationships
+
+In sf objects there is the possibility to store information about how attributes relate to geometries (for more information, see here). You can get and set this information with the function sf::st_agr() (for the setter, you can also use the pipe-friendly version sf::st_set_agr()). In a sfnetwork, you can use the same functions to get and set this information for the active element of the network.
+
+```{r}
+net %>%
+  activate("edges") %>%
+  st_set_agr(c("name" = "constant", "type" = "constant")) %>%
+  st_agr()
+```
+
+
