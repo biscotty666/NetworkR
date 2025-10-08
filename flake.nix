@@ -54,6 +54,7 @@
               SnowballC #
               bookdown
               car #
+              dbscan
               egor #
               ergm #
               factoextra #
