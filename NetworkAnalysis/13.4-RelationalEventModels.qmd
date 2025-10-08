@@ -1,0 +1,626 @@
+---
+title: "Relational Event Models"
+format: gfm
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(paged.print = FALSE)
+```
+
+Relational event models are based on micro-interaction data. The model assumes that there is time-stamped (or at least ordered) information on the interactions between a set of actors. This shifts the focus from discrete relationships (friend, advice, etc.) to the specific interactions between actors in a setting. The goal of the model is to predict what the next event is likely to be, based on the interactional tendencies, or rules, of behavior in the setting. Compare this to STERGM, where the goal is to predict the adding/dropping of ties from one period to the next, based on discretely defined networks.
+
+Here we consider one classroom on two different days; both days are in the second semester of the year. We pick two days as a means of comparison. The first day was relatively uneventful and class was orderly. The second day was different, as there was a much higher rate of sanctioning behavior (i.e., disagreements between students and teacher on what was going on in the classroom). By examining two days, we see if the interactional signatures of order and disorder are different.
+
+# Data Preparation
+
+```{r}
+#| message: false
+library(relevent)
+library(sna)
+```
+
+
+```{r}
+# url1 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class_interactions_date1.txt"
+
+interactions_date1 <- read.table("../data/class_interactions_date1.txt", header = T)
+head(interactions_date1[, c("send_col", "receive_col", "time_estimate_col")])
+str(interactions_date1)
+```
+
+Data must be time-ordered, and each event's time period must be unique. Not appropriate for cases with a large number of simultaneous events.
+
+For the sake of simplicity, we will remove all interactions directed from the teacher to all students or from all students to the teacher.
+
+```{r}
+not_to_all <- interactions_date1$to_all_col == 0
+not_from_all <- interactions_date1$from_all_col == 0
+interactions_date1 <- interactions_date1[not_to_all & not_from_all, ]
+```
+
+Create a matrix with time, sender and receiver.
+
+```{r}
+edgelist_date1 <- as.matrix(
+  interactions_date1[, c(
+    "time_estimate_col",
+    "send_col", "receive_col"
+  )]
+)
+tail(edgelist_date1)
+```
+
+Add a row for stop time.
+
+```{r}
+edgelist_date1 <- rbind(edgelist_date1, c(43.10, NA, NA))
+```
+
+Read in attribute data
+
+```{r}
+# url2 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class_attributes.txt"
+
+attributes <- read.table("../data/class_attributes.txt", header = T)
+head(attributes)
+```
+
+There are four variables:
+- id
+- gnd (gender: 1 = male; 2 = female)
+- grd (grade: 10 = 10; 11 = 11; 16 = teacher)
+- rce (race: 3 = Black; 4 = White).
+
+The relevent package requires that a researcher construct the node-level predictors as distinct columns (as opposed to using a factor() function within the formula). So, we will recode our variables to create the desired dummy variables of interest. In this case, we will create a predictor for whether the node is a teacher or not and for gender. We also need to create a term for the intercept. We will utilize the recode() function in the car package.
+
+```{r}
+#| message: false
+library(car)
+```
+
+Create a variable for the intercept, a 1 for all nodes.
+
+```{r}
+attributes$intercept <- 1
+```
+
+Recode gender and teacher
+
+```{r}
+attributes$male <- recode(attributes$gnd,
+  as.factor = F,
+  "1 = 1; 2 = 0"
+)
+attributes$teacher <- recode(attributes$grd,
+  as.factor = F,
+  "16 = 1; NA = NA; else = 0"
+)
+class_size <- nrow(attributes)
+```
+
+# Initial Models
+
+Based on the logic of hazard models, risk of event occurring.
+
+p-shifts are participation shifts, only based on the previous event. For example, if A talks to B, B is likely to respond.
+
+We are now in a position to run an initial relational event model. The function is rem.dyad(). The main arguments are:
+
+- edgelist = input edgelist in the form of time of event, sender, receiver
+- n = size of network
+- effects = vector with names of effects to be included in the model
+- covar = list of covariates that must correspond to the terms specified in effects
+- ordinal = T/F; T if data are ordinal (ordered but without specific time stamps); F if data include time specific information for each event
+
+
+## Intercept only
+
+Our first model will be very simple and just includes an intercept, capturing the baseline rate for events to occur. We will set the effects to CovSnd. CovSnd is a basic sender effect, in this case initiating social interactions with others. We use the covar option to include specific terms for CovSnd. In this case we include the intercept (so all nodes are assumed to initiate interactions at the same rate). We set ordinal to FALSE as the data has time stamped information. 
+
+
+```{r}
+set.seed(1000)
+mod1 <- rem.dyad(
+  edgelist = edgelist_date1, n = class_size,
+  effects = c("CovSnd"),
+  covar = list(CovSnd = attributes$intercept),
+  ordinal = F, hessian = T
+)
+summary(mod1)
+```
+
+- if we exponentiate this coefficient, we get the **hazard of any event** (i talking to j) occurring. Higher hazards mean the risk for an event occurring is higher. 
+- if we multiple the hazard rate by the number of possible node pairs who could interact in a given moment, n * (n - 1), we should get the **expected number of interactions occurring per minute** in the classroom. 
+- if we take the inverse of that (1 / number of interactions per minute), we get the **expected amount of time between events**, or the wait time between events.
+
+```{r}
+1 / (class_size * (class_size - 1) * exp(mod1$coef))
+```
+
+The expected time between any event occurring is .189 standardized minutes (or .189 * 60 = 11.34 seconds). 
+
+And let's check this against the real data. We will take the total number of minutes for that class and divide that by the total number of interactions that occurred. We will define the total number of minutes as 43.1, the end time set above.
+
+```{r}
+total_classtime <- 43.1
+num_interactions <- nrow(edgelist_date1) - 1
+time_between_events <- total_classtime / num_interactions
+time_between_events
+```
+
+## Adding Sender and Receiver Effects
+
+Let's first add a term for gender (coded as male = 1 and female = 0). We will add a sender effect, capturing whether males initiate fewer or greater interactions than females, as well as a receiver effect, capturing whether males receive fewer/greater interactions than females.
+
+Create a matrix for each covariate.
+
+```{r}
+CovSnd1 <- cbind(attributes[, c("intercept", "male")])
+CovRec1 <- cbind(attributes[, c("male")])
+mod2a <- rem.dyad(edgelist_date1,
+  n = class_size,
+  effects = c("CovSnd", "CovRec"),
+  covar = list(CovSnd = CovSnd1, CovRec = CovRec1),
+  ordinal = F, hessian = T
+)
+names(mod2a$coef) <- c("Intercept", "Sender_male", "Receiver_male")
+summary(mod2a)
+```
+
+Relative hazard for males to initiate the next interaction:
+
+```{r}
+exp(-.601249)
+```
+
+This means that an event with males initiating has a hazard that is 0.548 times lower than an event with females initiating.
+
+Expected time between male-male events:
+
+```{r}
+table(attributes$male)
+```
+
+There are 12 females and 6 males. There are 6 * 5 ways a boy can be sender and receiver.
+
+```{r}
+dyads_at_risk <- 6 * 5
+```
+
+Multiply the coefficients by the input values
+
+```{r}
+inputs <- c(intercept = 1, Sender_male = 1, Receiver_male = 1)
+hazard_male_male <- exp(sum(mod2a$coef * inputs))
+hazard_male_male
+```
+
+Expected wait time
+
+```{r}
+1 / (dyads_at_risk * hazard_male_male)
+```
+
+Expected wait of 4.14 minutes between events involving two boys. Compare to girls:
+
+```{r}
+inputs <- c(intercept = 1, Sender_male = 0, Receiver_male = 0)
+dyads_at_risk <- 12 * 11
+hazard_female_female <- exp(sum(mod2a$coef * inputs))
+hazard_female_female
+1 / (dyads_at_risk * hazard_female_female)
+```
+
+Hazard is higher and wait time is much lower.
+
+Add teacher to the model:
+
+```{r}
+CovSnd2 <- cbind(attributes[, c("intercept", "male", "teacher")])
+CovRec2 <- cbind(attributes[, c("male", "teacher")])
+mod2b <- rem.dyad(edgelist_date1,
+  n = class_size,
+  effects = c("CovSnd", "CovRec"),
+  covar = list(CovSnd = CovSnd2, CovRec = CovRec2),
+  ordinal = F, hessian = T
+)
+```
+
+```{r}
+coef_names2b <- c(
+  "Intercept", "Sender_male", "Sender_teacher",
+  "Receiver_male", "Receiver_teacher"
+)
+names(mod2b$coef) <- coef_names2b
+summary(mod2b)
+```
+
+Adding teacher variables does not help. Compare the fit with BIC
+
+```{r}
+mod2a$BIC - mod2b$BIC
+```
+
+Lower values are wanted, so the first model is better
+
+## Adding Covariate Event Terms
+
+Covariate events are predictors that are based on attributes of a dyad. Here, we will add the seating structure of the class to the model. The basic idea is that nodes who are close in the classroom are more likely to talk to one another. 
+
+```{r}
+# url3 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class_seating_date1.txt"
+
+seating_date1 <- read.table("../data/class_seating_date1.txt", header = T)
+head(seating_date1)
+```
+
+As in the previous tutorial, the data is stored as an edgelist, indicating if node i is sitting adjacent to node j. The rem.dyad() function requires that this information be transformed into a matrix. So, we will go ahead and create a matrix of seating, where there is a 1 if i and j are next to each other in the class and 0 otherwise. We will accomplish this by taking the seating edgelist, turning it into a directed network object, and then symmetrizing it to make it undirected (this simply fixes any mistakes in the data where i may be recorded as being next to j but j is not recorded as being next to i). We will use a 'weak' rule when symmetrizing the matrix, so if i is recorded as sitting next to j or j is recorded as sitting next to i, the matrix will have a 1 for both ij and ji. Note that the symmetrize() function will output a matrix by default.
+
+```{r}
+library(magrittr)
+seating_matrix_date1 <- network(
+  x = seating_date1, directed = T,
+  vertices = data.frame(ids = 1:class_size)
+) %>%
+  symmetrize(rule = "weak")
+seating_matrix_date1
+```
+
+```{r}
+mod3a <- rem.dyad(edgelist_date1,
+  n = class_size,
+  effects = c("CovSnd", "CovRec", "CovEvent"),
+  covar = list(
+    CovSnd = CovSnd1, CovRec = CovRec1,
+    CovEvent = seating_matrix_date1
+  ),
+  ordinal = F, hessian = T
+)
+```
+
+```{r}
+mod2a$BIC - mod3a$BIC
+```
+
+The fit is dramatically improved, so seating arrangement strongly shape what events occur.
+
+Add friendship data.
+
+
+```{r}
+# url4 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class_edgelist_sem2.txt"
+
+friends_sem2 <- read.table("../data/class_edgelist_sem2.txt", header = T)
+head(friends_sem2)
+```
+
+```{r}
+friends_matrix_sem2 <-
+  network(
+    x = friends_sem2, directed = T,
+    vertices = data.frame(ids = 1:class_size)
+  ) %>%
+  as.matrix()
+friends_matrix_sem2
+```
+
+ The rem.dyad() function requires that multiple matrices first be put together as an p X n X n array, where p is the number of matrices and n is the size of the network.
+ 
+```{r}
+CovEvent_date1 <- array(
+  data = NA,
+  dim = c(2, class_size, class_size)
+)
+CovEvent_date1[1, , ] <- seating_matrix_date1
+CovEvent_date1[2, , ] <- friends_matrix_sem2
+dim(CovEvent_date1)
+```
+ 
+```{r}
+mod3b <- rem.dyad(edgelist_date1,
+  n = class_size,
+  effects = c("CovSnd", "CovRec", "CovEvent"),
+  covar = list(
+    CovSnd = CovSnd1,
+    CovRec = CovRec1,
+    CovEvent = CovEvent_date1
+  ),
+  ordinal = F, hessian = T
+)
+names(mod3b$coef) <- c(
+  "Intercept", "Sender_male", "Receiver_male",
+  "Seating", "Friendship"
+)
+summary(mod3b)
+```
+
+Friendship and Seating are both predictive of interaction events. The gender difference still exists and is significant.
+
+# Micro Rules of Interaction
+
+So far we have built up a simple but plausible model of interactions in this classroom. Girls tend to talk more than boys, while friends and those sitting close to each other also tend to interact during class. What we have yet to capture is something about the 'rules' of interaction. For example, we might expect turn taking (i talks to j and then j talks to i) above what we can capture from friendship and seating effects alone.
+
+We will build up our model slowly, including more complicated rules as we go along. As a start, let's include terms that capture recency of events. The two terms of interest are "RRecSnd" and "RSndSnd". With RRecSnd, we test if i is more likely to talk to j if j recently talked to i. With RSndSnd, we test if i is more likely to talk to j if i recently talked to j. The effects capture the idea that if j recently talked to i (or i recently talked to j), then an i->j event is more likely to be the next event. We will specify this model by including the "RRecSnd" and "RSndSnd" in the vector of effects. Note that we do not need to add anything to the covar list. For this first model we will not control for friendship or seating.
+
+```{r}
+mod4a <- rem.dyad(edgelist_date1, class_size,
+  c("CovSnd", "CovRec", "RRecSnd", "RSndSnd"),
+  covar = list(CovSnd = CovSnd1, CovRec = CovRec1),
+  ordinal = F, hessian = T
+)
+```
+
+```{r}
+coef_names2a <- c("Intercept", "Sender_male", "Receiver_male")
+names(mod4a$coef) <- c("Recency_ji", "Recency_ij", coef_names2a)
+summary(mod4a)
+```
+
+If j recently talked to i, i is likely to respond. It is less likely that the next event will be i to j if the recent event is also i to j. Gender effects are still significant.
+
+Full model, with seating and friendship:
+
+```{r}
+mod4b <- rem.dyad(
+  edgelist_date1, class_size,
+  effects = c(
+    "CovSnd", "CovRec",
+    "CovEvent", "RRecSnd", "RSndSnd"
+  ),
+  covar = list(
+    CovSnd = CovSnd1, CovRec = CovRec1,
+    CovEvent = CovEvent_date1
+  ),
+  ordinal = F, hessian = T
+)
+```
+
+```{r}
+coef_names3b <- c(coef_names2a, "Seating", "Friendship")
+coef_names4b <- c("Recency_ji", "Recency_ij", coef_names3b)
+names(mod4b$coef) <- coef_names4b
+```
+
+```{r}
+summary(mod4b)
+```
+
+```{r}
+mod3b$BIC - mod4b$BIC
+```
+
+The model is greatly improved, but the gender coefficients are no longer significant.
+
+We will now consider terms that capture p-shifts, or participation shifts. p-shifts are based strictly on the most recent event that occurred, rather than recency effects which can go back further in time. The idea is to capture micro rules in how interactions play out, based on the last interaction that took place. For our first example, we will add a turn taking rule, where A talks to B and the very next event is B talking to A. This is specified as "PSAB-BA" (as part of the effects vector). The rest of the model is the same as the previous model.
+
+```{r}
+mod4c <- rem.dyad(
+  edgelist_date1, class_size,
+  effects = c(
+    "CovSnd", "CovRec", "CovEvent",
+    "RRecSnd", "RSndSnd", "PSAB-BA"
+  ),
+  covar = list(
+    CovSnd = CovSnd1, CovRec = CovRec1,
+    CovEvent = CovEvent_date1
+  ),
+  ordinal = F, hessian = T
+)
+coef_names4c <- c(coef_names4b, "PSAB_BA")
+names(mod4c$coef) <- coef_names4c
+summary(mod4c)
+```
+
+We can see that the fit is improved greatly, as there is a large effect of turn taking in social interactions. We can also see that the effects for recency are much reduced from the previous model. Now, let's add a somewhat more complicated interactional rule. Here we will add a term for 'turn continuing', "PSAB-AY". This means that A talks with B and the very next event is A talking to someone else (besides B). We will also add a term for 'turn receiving', "PSAB-BY". Here, A talks to B and the very next event is B talking to someone else (besides A).
+
+```{r}
+mod4d <- rem.dyad(
+  edgelist_date1, class_size,
+  effects = c(
+    "CovSnd", "CovRec", "CovEvent",
+    "RRecSnd", "RSndSnd", "PSAB-BA",
+    "PSAB-BY", "PSAB-AY"
+  ),
+  covar = list(
+    CovSnd = CovSnd1, CovRec = CovRec1,
+    CovEvent = CovEvent_date1
+  ),
+  ordinal = F, hessian = T
+)
+coef_names4d <- c(coef_names4b, "PSAB_BA", "PSAB_BY", "PSAB_AY")
+names(mod4d$coef) <- coef_names4d
+summary(mod4d)
+```
+
+It is likely that once A talks, B will either respond directly or send a message to someone else. It is not likely A will send another message.
+
+```{r}
+mod4c$BIC - mod4d$BIC
+```
+
+The fit is improved.
+
+Let's look at one more set of terms, here focusing on interactional tendencies related to usurping the conversation. We include p-shift terms for "PSAB-XA" and "PSAB-XB". With PSAB-XA, A talks to B and then another node (X) usurps the conversation and answers A. With PSAB-XB, A talks to B and then another node (X) usurps the conversation and talks to B. In both cases, a node talks 'out of turn' relative to the previous event. Let's go ahead and add these terms to the model.
+
+```{r}
+mod4e <- rem.dyad(edgelist_date1,
+  n = class_size,
+  effects = c(
+    "CovSnd", "CovRec", "CovEvent", "RRecSnd",
+    "RSndSnd", "PSAB-BA", "PSAB-BY",
+    "PSAB-AY", "PSAB-XA", "PSAB-XB"
+  ),
+  covar = list(
+    CovSnd = CovSnd1, CovRec = CovRec1,
+    CovEvent = CovEvent_date1
+  ),
+  ordinal = FALSE, hessian = TRUE
+)
+coef_names4e <- c(
+  coef_names4b, "PSAB_BA", "PSAB_BY", "PSAB_XA",
+  "PSAB_XB", "PSAB_AY"
+)
+names(mod4e$coef) <- coef_names4e
+summary(mod4e)
+```
+
+```{r}
+mod4d$BIC - mod4e$BIC
+```
+
+The fit is improved. If one usurps the conversation, it will be directed at B.
+
+The basic rules could be summarized as: if A talks to B then the next event should be B to A; B to someone else; or someone else to B. Thus, there are clear norms about turn taking. If A talks to B, B is very likely to be part of the next event (one way or another). Of course, we could imagine looking at other kinds of terms, but this is pretty good start to the model.
+
+# Assessing Model Fit
+
+We can look at the residuals and the predicted classification to see how well the model is actually predicting the data. Here we will work with mod4e, our preferred model from above. 
+
+
+```{r}
+head(mod4e$predicted.match)
+```
+
+```{r}
+send_col <- mod4e$predicted.match[, "send_col"]
+receive_col <- mod4e$predicted.match[, "receive_col"]
+
+table(send_col, receive_col)
+```
+
+```{r}
+prop.table(table(send_col, receive_col))
+```
+
+52% Exactly correct, 39% complete miss. Let's see where the model is not performing well.
+
+```{r}
+summary(mod4e$residuals)
+```
+
+Consider cases with high residuals.
+
+```{r}
+high_residuals <- which(mod4e$residuals > 10)
+edgelist_date1[high_residuals, ]
+```
+
+```{r}
+attributes[12, ]
+```
+
+12 is a teacher. We can try adding it back in.
+
+```{r}
+mod4f <- rem.dyad(
+  edgelist_date1, class_size,
+  effects = c(
+    "CovSnd", "CovRec", "CovEvent", "RRecSnd",
+    "RSndSnd", "PSAB-BA", "PSAB-BY",
+    "PSAB-AY", "PSAB-XA", "PSAB-XB"
+  ),
+  covar = list(
+    CovSnd = CovSnd2, CovRec = CovRec2,
+    CovEvent = CovEvent_date1
+  ),
+  ordinal = FALSE, hessian = TRUE
+)
+coef_names4f <- c(
+  "Recency_ji", "Recency_ij", "Intercept",
+  "Sender_male", "Sender_teacher",
+  "Receiver_male", "Receiver_teacher",
+  "Seating", "Friendship",
+  "PSAB_BA", "PSAB_BY",
+  "PSAB_XA", "PSAB_XB", "PSAB_AY"
+)
+
+names(mod4f$coef) <- coef_names4f
+mod4e$BIC - mod4f$BIC
+summary(mod4f)
+```
+
+We can see that the teacher is part of more interactions as the receiver (being talked to) than we would expect based on other terms in the model. This is likely the case because the teacher can easily talk to anyone in the class (i.e., the teacher is not subject to only talking to those adjacent to them in the classroom), and so the term on the seating arrangement pushes the previous model to under predict interactions with the teacher. This is now rectified in the current model.
+
+```{r}
+send_col <- mod4f$predicted.match[, "send_col"]
+receive_col <- mod4f$predicted.match[, "receive_col"]
+
+prop.table(table(send_col, receive_col))
+```
+
+Performance is still worse.
+
+# Comparison to a second date
+
+We have so far run a number of models, interpreted the results and learned a bit about the interactional dynamics in this classroom. Here, we run through the same exercise (an abbreviated version) using interactional data from a different date. The classroom is the same, so the actors are the same, but this class takes place later in the second semester. More importantly, this was a date where there was a great deal more misbehaving in the class and the teacher had to sanction students to a much larger extent. Our question is how (or if) the interactional tendencies are different in a day where the class is less orderly and controlled. 
+
+```{r}
+library(tidyverse)
+# url5 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class_interactions_date2.txt"
+
+interactions_date2 <-
+  read.table("../data/class_interactions_date2.txt",
+    header = T
+  ) %>%
+  filter(to_all_col == 0 & from_all_col == 0)
+```
+
+```{r}
+var_names <- c("time_estimate_col", "send_col", "receive_col")
+edgelist_date2 <- as.matrix(interactions_date2[, var_names]) %>%
+  rbind(c(33.10, NA, NA))
+tail(edgelist_date2)
+```
+
+```{r}
+# url6 <- "https://github.com/JeffreyAlanSmith/Integrated_Network_Science/raw/master/data/class_seating_date2.txt"
+
+seating_date2 <- read.table("../data/class_seating_date2.txt",
+  header = T
+)
+head(seating_date2)
+```
+
+```{r}
+seating_matrix_date2 <-
+  network(seating_date2,
+    directed = T,
+    vertices = data.frame(ids = 1:class_size)
+  ) %>%
+  symmetrize(rule = "weak")
+
+CovEvent_date2 <- array(data = NA, dim = c(2, class_size, class_size))
+CovEvent_date2[1, , ] <- seating_matrix_date2
+CovEvent_date2[2, , ] <- friends_matrix_sem2
+```
+
+```{r}
+mod4f_date2 <- rem.dyad(edgelist_date2,
+  n = class_size,
+  effects = c(
+    "CovSnd", "CovRec",
+    "CovEvent", "RRecSnd", "RSndSnd",
+    "PSAB-BA", "PSAB-BY", "PSAB-AY",
+    "PSAB-XA", "PSAB-XB"
+  ),
+  covar = list(
+    CovSnd = CovSnd2,
+    CovRec = CovRec2,
+    CovEvent = CovEvent_date2
+  ),
+  ordinal = FALSE, hessian = TRUE
+)
+```
+
+```{r}
+names(mod4f_date2$coef) <- coef_names4f
+summary(mod4f_date2)
+```
+
+```{r}
+compare_coefs <- data.frame(date1 = mod4f$coef, date2 = mod4f_date2$coef)
+compare_coefs
+```
+
+The effects for friendship and seating are particularly important for the second day. Similarly, there is some evidence that the tendency for PSAB-BY p-shifts are relatively high here. A class that is more unruly tends to have interactions that are based more on friendship and adjacent seating (i.e. talking to neighbors rather than doing discussion). Additionally, there may be a higher (relative) tendency for nodes to form a kind of two-step interaction (A-B-Y) rather than just a simple return to the person addressing them (A-B-A). This would potentially create more disruption in the classroom, as a larger number of students are brought into the initial interaction event.
